@@ -52,12 +52,19 @@ def init_db():
             );
             """)
 
-        # Seed baseline previous screening for immediate demo readiness
-        cursor = conn.cursor()
-        cursor.execute("SELECT COUNT(*) FROM screenings;")
-        count = cursor.fetchone()[0]
-        if count == 0:
-            _seed_baseline_screening(conn)
+            conn.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id TEXT UNIQUE NOT NULL,
+                name TEXT NOT NULL,
+                email TEXT UNIQUE NOT NULL,
+                password_hash TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            );
+            """)
+
+        # Seed baseline screenings (uses INSERT OR IGNORE)
+        _seed_baseline_screening(conn)
     finally:
         conn.close()
 
@@ -117,32 +124,33 @@ def _seed_baseline_screening(conn: sqlite3.Connection):
     }
 
     with conn:
-        conn.execute("""
-        INSERT OR IGNORE INTO screenings (screening_id, created_at, score, score_label, recommendation, disclaimer, report_json)
-        VALUES (?, ?, ?, ?, ?, ?, ?);
-        """, (
-            baseline_id,
-            past_date,
-            76,
-            "Preliminary Visual Screening Score",
-            sample_report["recommendation"],
-            sample_report["disclaimer"],
-            json.dumps(sample_report)
-        ))
+        for s_id in [baseline_id, "scr_demo"]:
+            conn.execute("""
+            INSERT OR IGNORE INTO screenings (screening_id, created_at, score, score_label, recommendation, disclaimer, report_json)
+            VALUES (?, ?, ?, ?, ?, ?, ?);
+            """, (
+                s_id,
+                past_date,
+                76,
+                "Preliminary Visual Screening Score",
+                sample_report["recommendation"],
+                sample_report["disclaimer"],
+                json.dumps({**sample_report, "screening_id": s_id})
+            ))
 
-        conn.execute("""
-        INSERT OR IGNORE INTO questionnaire_responses (screening_id, tooth_sensitivity, pain_discomfort, gum_bleeding, teeth_or_gum_changes, last_dental_visit, specific_concern)
-        VALUES (?, ?, ?, ?, ?, ?, ?);
-        """, (
-            baseline_id,
-            "mild",
-            "none",
-            "flossing",
-            "none",
-            "6_to_12_months",
-            "Baseline preventive check"
-        ))
-    logger.info("Seeded baseline previous screening '%s' into database", baseline_id)
+            conn.execute("""
+            INSERT OR IGNORE INTO questionnaire_responses (screening_id, tooth_sensitivity, pain_discomfort, gum_bleeding, teeth_or_gum_changes, last_dental_visit, specific_concern)
+            VALUES (?, ?, ?, ?, ?, ?, ?);
+            """, (
+                s_id,
+                "mild",
+                "none",
+                "flossing",
+                "none",
+                "6_to_12_months",
+                "Baseline preventive check"
+            ))
+    logger.info("Seeded baseline screenings into database")
 
 
 def save_screening(screening_id: str, report: Dict[str, Any], questionnaire: Optional[Dict[str, Any]] = None) -> bool:
@@ -220,6 +228,7 @@ def get_screening_by_id(screening_id: str) -> Optional[Dict[str, Any]]:
             return None
 
         report = json.loads(row["report_json"])
+        report["screening_id"] = screening_id
 
         # Fetch questionnaire if present
         cursor.execute("SELECT * FROM questionnaire_responses WHERE screening_id = ?;", (screening_id,))
@@ -236,3 +245,52 @@ def get_screening_by_id(screening_id: str) -> Optional[Dict[str, Any]]:
         return report
     finally:
         conn.close()
+
+
+def create_user(user_id: str, name: str, email: str, password_hash: str) -> Dict[str, Any]:
+    """Insert a new user record into SQLite."""
+    conn = _get_connection()
+    try:
+        created_at = datetime.now(timezone.utc).isoformat()
+        with conn:
+            conn.execute("""
+            INSERT INTO users (user_id, name, email, password_hash, created_at)
+            VALUES (?, ?, ?, ?, ?);
+            """, (user_id, name.strip(), email.strip().lower(), password_hash, created_at))
+        return {
+            "user_id": user_id,
+            "name": name.strip(),
+            "email": email.strip().lower(),
+            "created_at": created_at,
+        }
+    finally:
+        conn.close()
+
+
+def get_user_by_email(email: str) -> Optional[Dict[str, Any]]:
+    """Retrieve user record by email."""
+    conn = _get_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM users WHERE email = ?;", (email.strip().lower(),))
+        row = cursor.fetchone()
+        if not row:
+            return None
+        return dict(row)
+    finally:
+        conn.close()
+
+
+def get_user_by_id(user_id: str) -> Optional[Dict[str, Any]]:
+    """Retrieve user record by user_id."""
+    conn = _get_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT user_id, name, email, created_at FROM users WHERE user_id = ?;", (user_id,))
+        row = cursor.fetchone()
+        if not row:
+            return None
+        return dict(row)
+    finally:
+        conn.close()
+

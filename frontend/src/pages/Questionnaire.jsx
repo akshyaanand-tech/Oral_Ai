@@ -75,7 +75,7 @@ const QUESTIONS = [
     question: '7. What is your City or Postal/PIN Code?',
     desc: 'Used to locate verified dental practices and regional cost ranges (no GPS required).',
     type: 'text',
-    placeholder: 'e.g., Boston, New York, San Francisco, 560001, 10001...',
+    placeholder: 'e.g., Thiruvananthapuram, Kochi, Bengaluru, Boston, 560001...',
   },
 ];
 
@@ -179,7 +179,7 @@ export default function Questionnaire({ initialAnswers, onComplete, onBack }) {
         <div className="question-disclaimer-note">
           <Sparkles className="w-4 h-4 text-cyan-400 flex-shrink-0" />
           <span>
-            Questionnaire responses provide self-reported context for personalized guidance and are kept strictly independent from AI visual scoring.
+            Questionnaire responses provide self-reported context and are kept strictly independent from AI visual scoring.
           </span>
         </div>
 

@@ -59,16 +59,28 @@ def _describe_change(category: str, prev_sev: str, curr_sev: str) -> str:
             return "Visible indicators appear less prominent compared with the previous screening"
 
 
+def _normalize_findings(findings: Any) -> Dict[str, Any]:
+    if isinstance(findings, dict):
+        return findings
+    if isinstance(findings, list):
+        norm = {}
+        for item in findings:
+            if isinstance(item, dict) and "category" in item:
+                norm[item["category"]] = item
+        return norm
+    return {}
+
+
 def compare_screenings(prev: Dict[str, Any], curr: Dict[str, Any]) -> Dict[str, Any]:
     """
     Compare two screenings across overall score and categories.
     """
-    prev_score = int(prev.get("score", 0))
-    curr_score = int(curr.get("score", 0))
+    prev_score = int(prev.get("score") if prev.get("score") is not None else prev.get("screening_score", 0))
+    curr_score = int(curr.get("score") if curr.get("score") is not None else curr.get("screening_score", 0))
     score_change = curr_score - prev_score
 
-    prev_findings = prev.get("findings", {})
-    curr_findings = curr.get("findings", {})
+    prev_findings = _normalize_findings(prev.get("findings"))
+    curr_findings = _normalize_findings(curr.get("findings"))
 
     categories_result: Dict[str, Any] = {}
     for cat in ["alignment", "discoloration", "tooth_wear", "gum_appearance"]:

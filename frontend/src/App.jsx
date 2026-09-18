@@ -6,14 +6,57 @@ import CameraCapture from './pages/CameraCapture';
 import ReviewAll from './pages/ReviewAll';
 import Processing from './pages/Processing';
 import ResultsDashboard from './pages/ResultsDashboard';
-import { checkHealth, analyzeDentalImages, screenOralHealth } from './services/api';
+import Login from './pages/Login';
+import Register from './pages/Register';
+import { checkHealth, analyzeDentalImages, screenOralHealth, getCurrentUser } from './services/api';
 import { getAllSampleDentalImages } from './utils/sampleImages';
 import { AlertCircle, X } from 'lucide-react';
 
 export default function App() {
-  const [step, setStep] = useState('landing'); // 'landing' | 'questionnaire' | 'capture' | 'review' | 'processing' | 'results'
+  const [step, setStep] = useState('landing'); // 'landing' | 'questionnaire' | 'capture' | 'review' | 'processing' | 'results' | 'login' | 'register'
   const [backendStatus, setBackendStatus] = useState(null);
   const [errorMsg, setErrorMsg] = useState(null);
+
+  // User authentication state
+  const [currentUser, setCurrentUser] = useState(null);
+  const [authToken, setAuthToken] = useState(() => localStorage.getItem('oral_ai_token'));
+
+  // Load user profile on mount if token exists
+  useEffect(() => {
+    if (authToken) {
+      getCurrentUser(authToken)
+        .then((res) => {
+          if (res?.user) {
+            setCurrentUser(res.user);
+          }
+        })
+        .catch(() => {
+          localStorage.removeItem('oral_ai_token');
+          setAuthToken(null);
+          setCurrentUser(null);
+        });
+    }
+  }, [authToken]);
+
+  const handleLoginSuccess = (user, token) => {
+    setCurrentUser(user);
+    setAuthToken(token);
+    localStorage.setItem('oral_ai_token', token);
+    setStep('landing');
+  };
+
+  const handleRegisterSuccess = (user, token) => {
+    setCurrentUser(user);
+    setAuthToken(token);
+    localStorage.setItem('oral_ai_token', token);
+    setStep('landing');
+  };
+
+  const handleLogout = () => {
+    setCurrentUser(null);
+    setAuthToken(null);
+    localStorage.removeItem('oral_ai_token');
+  };
 
   // Questionnaire responses with City/PIN code support
   const [questionnaire, setQuestionnaire] = useState({
@@ -23,7 +66,7 @@ export default function App() {
     teeth_or_gum_changes: 'none',
     last_dental_visit: '6_to_12_months',
     specific_concern: '',
-    location: 'Boston',
+    location: '',
   });
 
   // 5 Dental images
@@ -89,7 +132,7 @@ export default function App() {
       setImages(samples);
 
       // Submit sample images + location to /api/screen endpoint
-      const loc = questionnaire.location || 'Boston';
+      const loc = questionnaire.location || '';
       let result;
       try {
         result = await screenOralHealth(samples, loc, questionnaire);
@@ -113,7 +156,7 @@ export default function App() {
     setStep('processing');
 
     try {
-      const loc = questionnaire.location || 'Boston';
+      const loc = questionnaire.location || '';
       let result;
       try {
         result = await screenOralHealth(images, loc, questionnaire);
@@ -149,7 +192,15 @@ export default function App() {
 
   return (
     <div className="app-root">
-      <Header onReset={handleReset} currentStep={step} backendStatus={backendStatus} />
+      <Header
+        onReset={handleReset}
+        currentStep={step}
+        backendStatus={backendStatus}
+        currentUser={currentUser}
+        onNavigateLogin={() => setStep('login')}
+        onNavigateRegister={() => setStep('register')}
+        onLogout={handleLogout}
+      />
 
       {/* Global Error Notice */}
       {errorMsg && (
@@ -163,8 +214,28 @@ export default function App() {
       )}
 
       <main className="main-content">
+        {step === 'login' && (
+          <Login
+            onLoginSuccess={handleLoginSuccess}
+            onNavigateRegister={() => setStep('register')}
+            onBack={() => setStep('landing')}
+          />
+        )}
+
+        {step === 'register' && (
+          <Register
+            onRegisterSuccess={handleRegisterSuccess}
+            onNavigateLogin={() => setStep('login')}
+            onBack={() => setStep('landing')}
+          />
+        )}
+
         {step === 'landing' && (
-          <Landing onStart={handleStart} onQuickDemo={handleQuickDemo} />
+          <Landing
+            currentUser={currentUser}
+            onStart={handleStart}
+            onQuickDemo={handleQuickDemo}
+          />
         )}
 
         {step === 'questionnaire' && (
@@ -199,6 +270,7 @@ export default function App() {
 
         {step === 'results' && (
           <ResultsDashboard
+            currentUser={currentUser}
             report={report}
             images={images}
             questionnaire={questionnaire}

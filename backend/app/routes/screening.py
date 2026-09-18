@@ -38,6 +38,7 @@ from app.services.cost_service import estimate_costs
 from app.services.provider_service import find_providers
 from app.services.scoring_service import calculate_score
 from app.services.gemini_service import generate_explanation
+from app.services.db import save_screening
 
 logger = logging.getLogger(__name__)
 
@@ -175,7 +176,7 @@ async def screen_oral_health(
     )
 
     # 10. Assemble and return final response
-    return ScreeningResponse(
+    resp = ScreeningResponse(
         screening_score=screening_score,
         findings=ml_output.findings,
         care_pathway=care_pathway.steps,
@@ -192,3 +193,20 @@ async def screen_oral_health(
             "analyzed_views": ml_output.analyzed_views,
         }
     )
+
+    # Persist screening record to SQLite for dentist report generation & referrals
+    try:
+        report_dict = resp.model_dump()
+        report_dict["score"] = screening_score
+        report_dict["score_label"] = (
+            score_details.get("score_label", "Preliminary Visual Screening Score")
+            if isinstance(score_details, dict)
+            else "Preliminary Visual Screening Score"
+        )
+        report_dict["recommendation"] = care_pathway.summary
+        save_screening(screening_id, report_dict, questionnaire_dict)
+        logger.info("Saved screening %s to database", screening_id)
+    except Exception as exc:
+        logger.warning("Failed to save screening %s to db: %s", screening_id, exc)
+
+    return resp

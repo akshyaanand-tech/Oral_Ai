@@ -106,14 +106,28 @@ def generate_html_report(report: Dict[str, Any]) -> str:
     suitable for sharing with or presenting to a dental professional.
     """
     screening_id = report.get("screening_id", "N/A")
-    created_at = report.get("created_at", "")[:10]
-    score = report.get("score", 0)
+    created_at = (report.get("created_at") or "")[:10]
+    score = report.get("score") if report.get("score") is not None else report.get("screening_score", 0)
     score_label = report.get("score_label", "Preliminary Visual Screening Score")
-    findings = report.get("findings", {})
-    breakdown = report.get("score_breakdown", {})
-    recommendation = report.get("recommendation", "")
+
+    raw_findings = report.get("findings", {})
+    if isinstance(raw_findings, list):
+        findings = {
+            item.get("category"): item
+            for item in raw_findings
+            if isinstance(item, dict) and item.get("category")
+        }
+    elif isinstance(raw_findings, dict):
+        findings = raw_findings
+    else:
+        findings = {}
+
+    breakdown = report.get("score_breakdown") or report.get("score_details", {}).get("category_deductions") or {}
+    recommendation = report.get("recommendation") or report.get("explanation") or ""
     questionnaire = report.get("questionnaire", {})
     guidance = report.get("guidance", {})
+    care_pathway = report.get("care_pathway", [])
+    estimated_costs = report.get("estimated_costs", [])
 
     q_items_html = ""
     if questionnaire:
@@ -157,6 +171,36 @@ def generate_html_report(report: Dict[str, Any]) -> str:
             </td>
         </tr>
         """
+
+    care_pathway_rows = ""
+    if care_pathway:
+        for step in care_pathway:
+            s_title = step.get("title", "Care Step")
+            s_urgency = step.get("urgency", "Routine")
+            s_spec = step.get("recommended_specialist", "General Dentist")
+            s_action = step.get("action", "")
+            care_pathway_rows += f"""
+            <tr style="border-bottom: 1px solid #e2e8f0;">
+                <td style="padding: 10px; font-weight: 600; color: #1e293b;">{s_title}</td>
+                <td style="padding: 10px; color: #0284c7; font-weight: 600;">{s_spec}</td>
+                <td style="padding: 10px; text-align: center;"><span style="display:inline-block; padding:2px 8px; border-radius:4px; font-size:12px; font-weight:600; background:#fef3c7; color:#92400e;">{s_urgency}</span></td>
+                <td style="padding: 10px; color: #334155; font-size: 13px;">{s_action}</td>
+            </tr>
+            """
+
+    cost_rows = ""
+    if estimated_costs:
+        for c in estimated_costs:
+            c_svc = c.get("service", "Dental Procedure")
+            c_cat = c.get("category", "").replace("_", " ").title()
+            c_range = c.get("cost_range", "")
+            cost_rows += f"""
+            <tr style="border-bottom: 1px solid #e2e8f0;">
+                <td style="padding: 10px; font-weight: 600; color: #1e293b;">{c_svc}</td>
+                <td style="padding: 10px; color: #64748b;">{c_cat}</td>
+                <td style="padding: 10px; text-align: right; font-weight: 700; color: #059669;">{c_range}</td>
+            </tr>
+            """
 
     tips_html = ""
     for tip in guidance.get("lifestyle_tips", []):
@@ -300,7 +344,41 @@ def generate_html_report(report: Dict[str, Any]) -> str:
             </tbody>
         </table>
 
-        <div class="section-title">3. Guidance & Recommendations</div>
+        {f'''
+        <div class="section-title">3. Suggested Care Pathway</div>
+        <table>
+            <thead>
+                <tr>
+                    <th style="width: 30%;">Recommended Step</th>
+                    <th style="width: 20%;">Specialist</th>
+                    <th style="width: 15%; text-align: center;">Urgency</th>
+                    <th style="width: 35%;">Action Plan</th>
+                </tr>
+            </thead>
+            <tbody>
+                {care_pathway_rows}
+            </tbody>
+        </table>
+        ''' if care_pathway_rows else ''}
+
+        {f'''
+        <div class="section-title">4. Indicative Dental Cost Estimates (₹ INR)</div>
+        <table>
+            <thead>
+                <tr>
+                    <th style="width: 45%;">Procedure / Service</th>
+                    <th style="width: 25%;">Category</th>
+                    <th style="width: 30%; text-align: right;">Indicative Range (₹)</th>
+                </tr>
+            </thead>
+            <tbody>
+                {cost_rows}
+            </tbody>
+        </table>
+        <p style="font-size: 11px; color: #64748b; margin-top: 6px;">Note: Indicative fee estimates for informational purposes only. Actual fees vary by clinic and clinical diagnosis.</p>
+        ''' if cost_rows else ''}
+
+        <div class="section-title">{'5' if care_pathway_rows else '3'}. Screening Summary & Guidance</div>
         <p style="color: #334155; margin-top: 6px;">{recommendation}</p>
         {f"<ul style='color: #475569; padding-left: 20px;'>{tips_html}</ul>" if tips_html else ""}
 

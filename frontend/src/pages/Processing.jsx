@@ -7,7 +7,7 @@ const STEPS = [
   'Image quality checked (multi-signal sharpness validation)',
   'Visual analysis (cautious non-diagnostic screening)',
   'Generating screening score (deterministic 0–100 indicator)',
-  'Preparing your report (dentist-ready summary & guidance)',
+  'Preparing your report (dentist-ready summary & visual findings)',
 ];
 
 export default function Processing() {

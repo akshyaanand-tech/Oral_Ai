@@ -1,7 +1,25 @@
 import React from 'react';
-import { Sparkles, ShieldAlert, RefreshCw } from 'lucide-react';
+import { Sparkles, RefreshCw, User, LogOut, LogIn, UserPlus } from 'lucide-react';
 
-export default function Header({ onReset, currentStep, backendStatus }) {
+export default function Header({
+  onReset,
+  currentStep,
+  backendStatus,
+  currentUser,
+  onNavigateLogin,
+  onNavigateRegister,
+  onLogout,
+}) {
+  const getInitials = (name) => {
+    if (!name) return 'PT';
+    return name
+      .split(' ')
+      .map((n) => n[0])
+      .join('')
+      .toUpperCase()
+      .slice(0, 2);
+  };
+
   return (
     <header className="site-header">
       <div className="header-container">
@@ -15,8 +33,8 @@ export default function Header({ onReset, currentStep, backendStatus }) {
           </div>
         </div>
 
-        <div className="header-right">
-          <div className="status-indicator" title={backendStatus?.status === 'ok' ? 'Backend Online' : 'Checking Backend'}>
+        <div className="header-right flex items-center gap-3">
+          <div className="status-indicator hidden sm:flex" title={backendStatus?.status === 'ok' ? 'Backend Online' : 'Checking Backend'}>
             <span className={`status-dot ${backendStatus?.status === 'ok' ? 'online' : 'checking'}`}></span>
             <span className="status-text">
               {backendStatus?.status === 'ok'
@@ -24,6 +42,47 @@ export default function Header({ onReset, currentStep, backendStatus }) {
                 : 'API: Connecting...'}
             </span>
           </div>
+
+          {/* Authentication Controls */}
+          {currentUser ? (
+            <div className="header-user-badge">
+              <div className="header-user-avatar">
+                {getInitials(currentUser.name)}
+              </div>
+              <span className="header-user-name" title={currentUser.email}>
+                {currentUser.name}
+              </span>
+              <button
+                type="button"
+                onClick={onLogout}
+                className="header-btn-logout"
+                title="Sign Out"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          ) : (
+            <div className="header-auth-group">
+              <button
+                type="button"
+                onClick={onNavigateLogin}
+                className="header-btn-login"
+                title="Sign In to your account"
+              >
+                <LogIn className="w-3.5 h-3.5 text-cyan-400" />
+                <span>Sign In</span>
+              </button>
+              <button
+                type="button"
+                onClick={onNavigateRegister}
+                className="header-btn-register"
+                title="Create a new account"
+              >
+                <UserPlus className="w-3.5 h-3.5" />
+                <span>Sign Up</span>
+              </button>
+            </div>
+          )}
 
           {currentStep !== 'landing' && (
             <button className="btn-ghost-sm" onClick={onReset} title="Start Over">

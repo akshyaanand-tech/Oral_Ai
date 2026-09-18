@@ -27,9 +27,9 @@ DEFAULT_PROCEDURES = [
         "code": "routine_exam",
         "service": "Comprehensive Oral Examination",
         "category": "preventive",
-        "min_cost": 35.0,
-        "max_cost": 85.0,
-        "currency": "USD",
+        "min_cost": 500.0,
+        "max_cost": 1200.0,
+        "currency": "INR",
         "unit": "visit",
         "notes": "Visual clinical examination by general dental practitioner."
     },
@@ -37,9 +37,9 @@ DEFAULT_PROCEDURES = [
         "code": "prophylaxis_cleaning",
         "service": "Professional Dental Cleaning / Prophylaxis",
         "category": "discoloration",
-        "min_cost": 75.0,
-        "max_cost": 150.0,
-        "currency": "USD",
+        "min_cost": 1000.0,
+        "max_cost": 2500.0,
+        "currency": "INR",
         "unit": "session",
         "notes": "Removal of plaque, calculus, and external surface stains."
     },
@@ -47,9 +47,9 @@ DEFAULT_PROCEDURES = [
         "code": "orthodontic_consult",
         "service": "Orthodontic Evaluation & Consultation",
         "category": "alignment",
-        "min_cost": 50.0,
-        "max_cost": 150.0,
-        "currency": "USD",
+        "min_cost": 800.0,
+        "max_cost": 2000.0,
+        "currency": "INR",
         "unit": "consultation",
         "notes": "Specialist orthodontic assessment for crowding, spacing, or bite."
     },
@@ -57,9 +57,9 @@ DEFAULT_PROCEDURES = [
         "code": "periodontal_exam",
         "service": "Periodontal Health Evaluation",
         "category": "gum_appearance",
-        "min_cost": 65.0,
-        "max_cost": 140.0,
-        "currency": "USD",
+        "min_cost": 600.0,
+        "max_cost": 1500.0,
+        "currency": "INR",
         "unit": "visit",
         "notes": "Detailed gingival pocket depth measurement and tissue review."
     },
@@ -67,9 +67,9 @@ DEFAULT_PROCEDURES = [
         "code": "occlusal_guard",
         "service": "Custom Night Guard / Splint Evaluation",
         "category": "tooth_wear",
-        "min_cost": 250.0,
-        "max_cost": 550.0,
-        "currency": "USD",
+        "min_cost": 3000.0,
+        "max_cost": 7000.0,
+        "currency": "INR",
         "unit": "appliance",
         "notes": "Custom lab-fabricated protective dental appliance for tooth wear or clenching."
     },
@@ -77,9 +77,9 @@ DEFAULT_PROCEDURES = [
         "code": "dental_xrays",
         "service": "Diagnostic Bitewing / Periapical Radiographs",
         "category": "diagnostic",
-        "min_cost": 40.0,
-        "max_cost": 110.0,
-        "currency": "USD",
+        "min_cost": 350.0,
+        "max_cost": 1000.0,
+        "currency": "INR",
         "unit": "series",
         "notes": "Digital X-ray imaging recommended during initial clinical evaluation."
     }
@@ -162,18 +162,15 @@ def estimate_costs(
     if external_data:
         procedures = external_data
 
-    # Regional multiplier & currency
-    reg_info = multipliers.get(region, {"currency": "USD", "multiplier": 1.0})
-    currency = reg_info.get("currency", "USD")
-    multiplier = float(reg_info.get("multiplier", 1.0))
+    # Currency and multiplier - strictly Indian Rupees (₹)
+    currency = "INR"
+    sym = "₹"
+    multiplier = 1.0
 
     # Identify categories needed in care pathway
     pathway_categories = {s.category for s in care_pathway.steps}
     # Always include preventive/exam as foundational
     pathway_categories.add("preventive")
-
-    symbol_map = {"USD": "$", "INR": "₹", "GBP": "£", "EUR": "€"}
-    sym = symbol_map.get(currency, f"{currency} ")
 
     estimates: List[CostEstimate] = []
     seen_codes = set()
@@ -184,8 +181,8 @@ def estimate_costs(
 
         if (cat in pathway_categories or cat == "preventive") and code not in seen_codes:
             seen_codes.add(code)
-            base_min = float(proc.get("min_cost", 30))
-            base_max = float(proc.get("max_cost", 100))
+            base_min = float(proc.get("min_cost", 500))
+            base_max = float(proc.get("max_cost", 1200))
 
             adj_min = round(base_min * multiplier)
             adj_max = round(base_max * multiplier)
@@ -200,7 +197,7 @@ def estimate_costs(
                     max_cost=float(adj_max),
                     currency=currency,
                     cost_range=range_str,
-                    notes=proc.get("notes", "Indicative cost range; actual charges vary by clinic."),
+                    notes=proc.get("notes", "Indicative cost range in INR; actual charges vary by clinic."),
                     indicative=True,
                 )
             )
@@ -211,10 +208,10 @@ def estimate_costs(
             CostEstimate(
                 service="Comprehensive Oral Examination",
                 category="preventive",
-                min_cost=35.0,
-                max_cost=85.0,
-                currency="USD",
-                cost_range="$35 - $85",
+                min_cost=500.0,
+                max_cost=1200.0,
+                currency="INR",
+                cost_range="₹500 - ₹1,200",
                 notes="Initial comprehensive clinical examination and consultation.",
                 indicative=True,
             )

@@ -12,8 +12,6 @@ import {
   FileText,
   Calendar,
   X,
-  History,
-  GitCompare,
   ExternalLink,
   MapPin,
   Phone,
@@ -22,39 +20,51 @@ import {
   Clock,
   ArrowRight,
   UserCheck,
-  DollarSign,
+  IndianRupee,
   Stethoscope,
   ListChecks,
+  Search,
+  Navigation,
+  Loader2,
+  AlertTriangle,
+  AlertCircle,
 } from 'lucide-react';
 import MedicalDisclaimer from '../components/MedicalDisclaimer';
 import {
-  fetchScreenings,
-  compareScreenings,
   fetchProviders,
   submitReferral,
   getReportHtmlUrl,
 } from '../services/api';
 
-export default function ResultsDashboard({ report, images, questionnaire, onRestart }) {
+export default function ResultsDashboard({ report, images, questionnaire, onRestart, currentUser }) {
   const [evidenceModal, setEvidenceModal] = useState(null);
   const [showQuestionnaire, setShowQuestionnaire] = useState(false);
-
-  // Longitudinal history & comparison states
-  const [historyList, setHistoryList] = useState([]);
-  const [selectedPastScreeningId, setSelectedPastScreeningId] = useState('');
-  const [comparisonResult, setComparisonResult] = useState(null);
-  const [isComparing, setIsComparing] = useState(false);
-  const [showComparisonModal, setShowComparisonModal] = useState(false);
+  const [showReportModal, setShowReportModal] = useState(false);
 
   // Dentist referral states
   const [showReferralModal, setShowReferralModal] = useState(false);
   const [providers, setProviders] = useState([]);
   const [selectedProvider, setSelectedProvider] = useState(null);
-  const [patientName, setPatientName] = useState('');
-  const [patientEmail, setPatientEmail] = useState('');
+  const [patientName, setPatientName] = useState(currentUser?.name || '');
+  const [patientEmail, setPatientEmail] = useState(currentUser?.email || '');
   const [patientPhone, setPatientPhone] = useState('');
   const [referralSuccess, setReferralSuccess] = useState(null);
   const [isSubmittingReferral, setIsSubmittingReferral] = useState(false);
+
+  // Auto-sync patient details when currentUser changes
+  useEffect(() => {
+    if (currentUser?.name && !patientName) setPatientName(currentUser.name);
+    if (currentUser?.email && !patientEmail) setPatientEmail(currentUser.email);
+  }, [currentUser]);
+
+  // Location-Aware Dentist Search State
+  const initialLoc = questionnaire?.location && questionnaire.location.toLowerCase() !== 'boston' ? questionnaire.location : '';
+  const [dentistLocationInput, setDentistLocationInput] = useState(initialLoc);
+  const [activeLocationLabel, setActiveLocationLabel] = useState(initialLoc);
+  const [isSearchingDentists, setIsSearchingDentists] = useState(false);
+  const [dentistSearchError, setDentistSearchError] = useState('');
+  const [hasSearchedDentists, setHasSearchedDentists] = useState(false);
+  const [locationPermissionDenied, setLocationPermissionDenied] = useState(false);
 
   const {
     screening_score,
@@ -68,7 +78,6 @@ export default function ResultsDashboard({ report, images, questionnaire, onRest
     estimated_costs = [],
     explanation = '',
     providers: reportProviders = [],
-    guidance = {},
     screening_id = 'scr_demo',
     created_at = new Date().toISOString(),
   } = report || {};
@@ -79,27 +88,111 @@ export default function ResultsDashboard({ report, images, questionnaire, onRest
     : rawFindings || {};
   const deductions = score_details?.category_deductions || score_breakdown || {};
 
-  // Fetch past screenings on mount for longitudinal tracking
-  useEffect(() => {
-    fetchScreenings().then((list) => {
-      setHistoryList(list || []);
-      // Pre-select the earlier screening if one exists that is different from current
-      const past = list.find((s) => s.screening_id !== screening_id);
-      if (past) {
-        setSelectedPastScreeningId(past.screening_id);
-      }
-    });
+  // Search dentists by GPS coordinates (Option A)
+  const handleUseCurrentLocation = () => {
+    setDentistSearchError('');
+    setLocationPermissionDenied(false);
 
-    if (reportProviders && reportProviders.length > 0) {
+    if (!navigator.geolocation) {
+      setDentistSearchError('Geolocation is not supported by your browser. Please enter your location manually.');
+      return;
+    }
+
+    setIsSearchingDentists(true);
+
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        const { latitude, longitude } = pos.coords;
+        setActiveLocationLabel(`Current Location (${latitude.toFixed(3)}°, ${longitude.toFixed(3)}°)`);
+        setDentistLocationInput('');
+        setHasSearchedDentists(true);
+        try {
+          const list = await fetchProviders({ latitude, longitude, limit: 6 });
+          setProviders(list || []);
+          if (list && list.length > 0) {
+            setSelectedProvider(list[0]);
+          } else {
+            setSelectedProvider(null);
+          }
+        } catch (err) {
+          setDentistSearchError("We couldn't find dentists for this location. Please try another location.");
+          setProviders([]);
+          setSelectedProvider(null);
+        } finally {
+          setIsSearchingDentists(false);
+        }
+      },
+      (err) => {
+        setIsSearchingDentists(false);
+        if (err.code === 1) { // PERMISSION_DENIED
+          setLocationPermissionDenied(true);
+          setDentistSearchError('Allow location access to find dentists near you. Or enter your city manually.');
+        } else if (err.code === 2) { // POSITION_UNAVAILABLE
+          setDentistSearchError('Location is currently unavailable. Please enter your city manually.');
+        } else if (err.code === 3) { // TIMEOUT
+          setDentistSearchError('Location request timed out. Please try again or enter your location manually.');
+        } else {
+          setDentistSearchError('Could not retrieve location. Please enter your location manually.');
+        }
+      },
+      { timeout: 12000, enableHighAccuracy: true }
+    );
+  };
+
+  // Search dentists by manual text (Option B)
+  const handleManualLocationSearch = async (e) => {
+    if (e) e.preventDefault();
+    const query = dentistLocationInput.trim();
+    if (!query) {
+      setDentistSearchError('Please enter a location or city name.');
+      return;
+    }
+
+    setDentistSearchError('');
+    setLocationPermissionDenied(false);
+    setIsSearchingDentists(true);
+    setActiveLocationLabel(query);
+    setHasSearchedDentists(true);
+
+    try {
+      const list = await fetchProviders({ location: query, limit: 6 });
+      setProviders(list || []);
+      if (list && list.length > 0) {
+        setSelectedProvider(list[0]);
+      } else {
+        setSelectedProvider(null);
+      }
+    } catch (err) {
+      setDentistSearchError("We couldn't find dentists for this location. Please try another location.");
+      setProviders([]);
+      setSelectedProvider(null);
+    } finally {
+      setIsSearchingDentists(false);
+    }
+  };
+
+  // Fetch providers for questionnaire location or report providers
+  useEffect(() => {
+    // If questionnaire specified a location (and not just default), look up real clinics for that location
+    if (initialLoc) {
+      setIsSearchingDentists(true);
+      fetchProviders({ location: initialLoc, limit: 6 })
+        .then((res) => {
+          setProviders(res || []);
+          if (res && res.length > 0) setSelectedProvider(res[0]);
+          setHasSearchedDentists(true);
+        })
+        .catch(() => {
+          setProviders([]);
+        })
+        .finally(() => {
+          setIsSearchingDentists(false);
+        });
+    } else if (reportProviders && reportProviders.length > 0) {
       setProviders(reportProviders);
       setSelectedProvider(reportProviders[0]);
-    } else {
-      fetchProviders().then((res) => {
-        setProviders(res || []);
-        if (res && res.length > 0) setSelectedProvider(res[0]);
-      });
     }
-  }, [screening_id, reportProviders]);
+  }, [screening_id]);
 
   const getScoreTheme = (val) => {
     if (val >= 80)
@@ -166,24 +259,12 @@ export default function ResultsDashboard({ report, images, questionnaire, onRest
   };
 
   const handleOpenHtmlReport = () => {
-    const url = getReportHtmlUrl(screening_id);
-    window.open(url, '_blank');
+    setShowReportModal(true);
   };
 
-  // Run previous-vs-current comparison
-  const handleCompare = async () => {
-    if (!selectedPastScreeningId) return;
-    setIsComparing(true);
-    try {
-      const res = await compareScreenings(selectedPastScreeningId, screening_id);
-      setComparisonResult(res);
-      setShowComparisonModal(true);
-    } catch (err) {
-      console.error('Comparison error:', err);
-      alert('Could not generate comparison: ' + err.message);
-    } finally {
-      setIsComparing(false);
-    }
+  const handleOpenNewWindow = () => {
+    const url = getReportHtmlUrl(screening_id);
+    window.open(url, '_blank');
   };
 
   // Submit referral inquiry
@@ -219,15 +300,43 @@ export default function ResultsDashboard({ report, images, questionnaire, onRest
         <h1>OralScreen AI — Preliminary Visual Screening Summary</h1>
         <p>
           Screening ID: {screening_id} • Date: {new Date(created_at).toLocaleDateString()}
+          {currentUser?.name && ` • Patient: ${currentUser.name}`}
         </p>
         <p className="print-notice">NOT A DIAGNOSIS • FOR PREVENTIVE AWARENESS ONLY</p>
       </div>
+
+      {/* Patient Welcome Header */}
+      {currentUser && (
+        <div className="patient-dashboard-welcome no-print">
+          <div className="welcome-user-info">
+            <div className="welcome-avatar">
+              {currentUser.name ? currentUser.name.slice(0, 2).toUpperCase() : 'PT'}
+            </div>
+            <div>
+              <div className="welcome-greeting">
+                Welcome, <span className="welcome-name">{currentUser.name}</span>!
+              </div>
+              <div className="welcome-meta">
+                Patient Account: {currentUser.email} • Screening ID: {screening_id}
+              </div>
+            </div>
+          </div>
+          <div className="welcome-status-pill">
+            <span className="user-status-dot"></span> Clinical Screening Saved
+          </div>
+        </div>
+      )}
 
       {/* Main Score Hero Card */}
       <div className="score-hero-card">
         <div className="score-hero-top">
           <div>
             <span className="badge-id">SCREENING ID: {screening_id}</span>
+            {currentUser?.name && (
+              <div style={{ fontSize: '0.85rem', color: '#38bdf8', fontWeight: 700, margin: '0.2rem 0' }}>
+                Screening for: {currentUser.name}
+              </div>
+            )}
             <h1 className="score-label-title">{score_label}</h1>
             <p className="score-summary-subtitle">{scoreTheme.desc}</p>
           </div>
@@ -404,62 +513,6 @@ export default function ResultsDashboard({ report, images, questionnaire, onRest
         </div>
       </div>
 
-      {/* Personalized Preventive Guidance Card */}
-      <div className="recommendation-card">
-        <div className="rec-icon-box">
-          <Sparkles className="w-6 h-6 text-cyan-400" />
-        </div>
-        <div className="rec-body">
-          <h3 className="rec-title">Personalized Preventive Guidance</h3>
-          <p className="rec-text">{recommendation}</p>
-
-          {/* Category-Specific Guidance */}
-          {guidance.category_guidance && (
-            <div className="mt-4 space-y-2">
-              <h4 className="text-xs font-bold text-slate-300 uppercase tracking-wider">
-                Category Insights
-              </h4>
-              <ul className="text-xs text-slate-300 space-y-1.5 list-disc pl-4">
-                {Object.entries(guidance.category_guidance).map(([k, text]) => (
-                  <li key={k}>
-                    <strong className="text-cyan-300 capitalize">{k.replace('_', ' ')}:</strong>{' '}
-                    {text}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-
-          {/* Lifestyle Wellness Tips */}
-          {guidance.lifestyle_tips && guidance.lifestyle_tips.length > 0 && (
-            <div className="mt-4">
-              <h4 className="text-xs font-bold text-slate-300 uppercase tracking-wider mb-1">
-                Daily Oral Wellness Tips
-              </h4>
-              <ul className="rec-bullet-list">
-                {guidance.lifestyle_tips.map((tip, idx) => (
-                  <li key={idx}>{tip}</li>
-                ))}
-              </ul>
-            </div>
-          )}
-
-          {/* User-Reported Context Label */}
-          {guidance.user_reported_notes && guidance.user_reported_notes.length > 0 && (
-            <div className="mt-4 p-3 bg-slate-800/80 border border-slate-700 rounded-md">
-              <h4 className="text-xs font-semibold text-amber-300 uppercase tracking-wider mb-1">
-                Context from Your Questionnaire (Self-Reported)
-              </h4>
-              <ul className="text-xs text-slate-300 space-y-1">
-                {guidance.user_reported_notes.map((note, idx) => (
-                  <li key={idx}>{note}</li>
-                ))}
-              </ul>
-            </div>
-          )}
-        </div>
-      </div>
-
       {/* Educational Explanation Layer */}
       {explanation && (
         <div className="score-breakdown-card border border-cyan-500/30 bg-gradient-to-br from-slate-900 via-slate-800 to-cyan-950/20">
@@ -533,11 +586,11 @@ export default function ResultsDashboard({ report, images, questionnaire, onRest
       {estimated_costs && estimated_costs.length > 0 && (
         <div className="score-breakdown-card">
           <div className="flex items-center gap-2 mb-2">
-            <DollarSign className="w-5 h-5 text-amber-400" />
-            <h3 className="breakdown-title">Indicative Regional Dental Cost Estimates</h3>
+            <IndianRupee className="w-5 h-5 text-amber-400" />
+            <h3 className="breakdown-title">Indicative Dental Cost Estimates (₹ INR)</h3>
           </div>
           <p className="breakdown-sub mb-4">
-            Estimated fee ranges for care pathway procedures based on standard dental fee surveys. Displayed as indicative ranges, not guaranteed prices.
+            Estimated fee ranges for care pathway procedures in Indian Rupees (₹) based on standard dental fee surveys. Displayed as indicative ranges, not guaranteed prices.
           </p>
 
           <div className="breakdown-table-wrap">
@@ -546,7 +599,7 @@ export default function ResultsDashboard({ report, images, questionnaire, onRest
                 <tr>
                   <th>Procedure / Service</th>
                   <th>Clinical Category</th>
-                  <th className="text-right">Indicative Range</th>
+                  <th className="text-right">Indicative Range (₹)</th>
                 </tr>
               </thead>
               <tbody>
@@ -569,77 +622,10 @@ export default function ResultsDashboard({ report, images, questionnaire, onRest
           </div>
 
           <div className="mt-3 p-2.5 rounded bg-slate-800/60 border border-slate-700/50 text-xs text-slate-400">
-            <strong>Note:</strong> Cost estimates are purely indicative ranges. Actual costs depend on the specific dental clinic, clinical diagnostic findings, and individual patient coverage.
+            <strong>Note:</strong> Cost estimates are purely indicative ranges in Indian Rupees (₹). Actual costs depend on the specific dental clinic, clinical diagnostic findings, and individual patient coverage.
           </div>
         </div>
       )}
-
-      {/* Longitudinal Tracking & Comparison Section */}
-      <div className="tracking-section-card no-print">
-        <div className="flex items-center justify-between flex-wrap gap-4 border-b border-slate-700/60 pb-4 mb-4">
-          <div>
-            <div className="flex items-center gap-2">
-              <History className="w-5 h-5 text-cyan-400" />
-              <h3 className="text-lg font-bold text-white">Longitudinal Screening History</h3>
-            </div>
-            <p className="text-xs text-slate-400 mt-1">
-              Track visible changes across your oral health screenings over time.
-            </p>
-          </div>
-
-          {/* Compare Selector & Action */}
-          {historyList.length > 1 && (
-            <div className="flex items-center gap-2">
-              <select
-                className="history-select"
-                value={selectedPastScreeningId}
-                onChange={(e) => setSelectedPastScreeningId(e.target.value)}
-              >
-                <option value="">Select past screening to compare</option>
-                {historyList
-                  .filter((s) => s.screening_id !== screening_id)
-                  .map((s) => (
-                    <option key={s.screening_id} value={s.screening_id}>
-                      {s.date} (Score: {s.score})
-                    </option>
-                  ))}
-              </select>
-
-              <button
-                className="btn-secondary-sm btn-compare"
-                onClick={handleCompare}
-                disabled={!selectedPastScreeningId || isComparing}
-              >
-                <GitCompare className="w-4 h-4" />
-                <span>{isComparing ? 'Comparing...' : 'Compare Screenings'}</span>
-              </button>
-            </div>
-          )}
-        </div>
-
-        {/* History Timeline Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-          {historyList.map((item) => {
-            const isCurrent = item.screening_id === screening_id;
-            return (
-              <div
-                key={item.screening_id}
-                className={`history-card ${isCurrent ? 'current-screening' : ''}`}
-              >
-                <div className="flex justify-between items-start">
-                  <span className="text-xs font-bold text-slate-400">{item.date}</span>
-                  {isCurrent && <span className="badge-pill badge-after">Current</span>}
-                </div>
-                <div className="mt-2 flex items-baseline gap-2">
-                  <span className="text-2xl font-extrabold text-white">{item.score}</span>
-                  <span className="text-xs text-slate-400">/ 100</span>
-                </div>
-                <div className="text-xs text-slate-400 mt-1 truncate">ID: {item.screening_id}</div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
 
       {/* Smart Dentist Referral Section */}
       <div className="referral-banner-card no-print">
@@ -653,6 +639,15 @@ export default function ResultsDashboard({ report, images, questionnaire, onRest
               Connect this preliminary screening report directly with a qualified dental provider
               for an in-person clinical examination, x-rays, or preventive cleaning.
             </p>
+            {activeLocationLabel && providers.length > 0 && (
+              <p className="text-xs text-cyan-300 mt-2 flex items-center gap-1.5 font-medium">
+                <MapPin className="w-3.5 h-3.5" />
+                <span>
+                  Found {providers.length} {providers.length === 1 ? 'dentist' : 'dentists'} near{' '}
+                  <strong>{activeLocationLabel}</strong> (closest: {providers[0].name} — {providers[0].distance})
+                </span>
+              </p>
+            )}
           </div>
 
           <div className="flex items-center gap-3">
@@ -792,113 +787,17 @@ export default function ResultsDashboard({ report, images, questionnaire, onRest
         </div>
       )}
 
-      {/* Comparison Modal */}
-      {showComparisonModal && comparisonResult && (
-        <div className="evidence-modal-backdrop" onClick={() => setShowComparisonModal(false)}>
-          <div
-            className="evidence-modal-card comparison-modal-card"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="evidence-modal-header">
-              <div className="flex items-center gap-2">
-                <GitCompare className="w-5 h-5 text-cyan-400" />
-                <h3 className="evidence-modal-title">Screening Comparison</h3>
-              </div>
-              <button className="btn-icon-close" onClick={() => setShowComparisonModal(false)}>
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {/* Score Delta Row */}
-            <div className="grid grid-cols-3 gap-3 p-3 bg-slate-800/80 rounded-lg border border-slate-700 text-center my-3">
-              <div>
-                <span className="text-xs text-slate-400">
-                  Previous ({comparisonResult.overall.previous_date || 'Earlier'})
-                </span>
-                <div className="text-xl font-bold text-slate-200">
-                  {comparisonResult.overall.previous_score}
-                </div>
-              </div>
-              <div>
-                <span className="text-xs text-slate-400">
-                  Current ({comparisonResult.overall.current_date || 'Today'})
-                </span>
-                <div className="text-xl font-bold text-white">
-                  {comparisonResult.overall.current_score}
-                </div>
-              </div>
-              <div>
-                <span className="text-xs text-slate-400">Score Delta</span>
-                <div
-                  className={`text-xl font-bold ${
-                    comparisonResult.overall.change >= 0 ? 'text-emerald-400' : 'text-amber-400'
-                  }`}
-                >
-                  {comparisonResult.overall.change >= 0
-                    ? `+${comparisonResult.overall.change}`
-                    : comparisonResult.overall.change}
-                </div>
-              </div>
-            </div>
-
-            {/* Category Transitions Table */}
-            <div className="comparison-categories-table-wrap">
-              <table className="breakdown-table">
-                <thead>
-                  <tr>
-                    <th>Category</th>
-                    <th>Previous</th>
-                    <th>Current</th>
-                    <th>Visible Change</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {Object.entries(comparisonResult.categories).map(([cat, info]) => (
-                    <tr key={cat}>
-                      <td className="font-semibold capitalize text-slate-200">
-                        {cat.replace('_', ' ')}
-                      </td>
-                      <td>
-                        <span className="badge-severity badge-mild capitalize">
-                          {info.previous}
-                        </span>
-                      </td>
-                      <td>
-                        <span className="badge-severity badge-none capitalize">
-                          {info.current}
-                        </span>
-                      </td>
-                      <td className="text-xs text-slate-300">{info.change}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            <div className="mt-3 p-2 bg-amber-500/10 border border-amber-500/30 rounded text-xs text-amber-200">
-              <strong>Notice:</strong> {comparisonResult.disclaimer}
-            </div>
-
-            <div className="evidence-modal-footer mt-4">
-              <button className="btn-secondary-sm" onClick={() => setShowComparisonModal(false)}>
-                Close Comparison
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Dentist Referral / Provider Connection Modal */}
       {showReferralModal && (
         <div className="evidence-modal-backdrop" onClick={() => setShowReferralModal(false)}>
           <div
-            className="evidence-modal-card referral-modal-card"
+            className="referral-modal-card"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="evidence-modal-header">
-              <div className="flex items-center gap-2">
+            <div className="referral-modal-header">
+              <div className="referral-modal-title">
                 <Building2 className="w-5 h-5 text-emerald-400" />
-                <h3 className="evidence-modal-title">Connect with a Dental Care Provider</h3>
+                <span>Find & Connect with a Dental Care Provider</span>
               </div>
               <button className="btn-icon-close" onClick={() => setShowReferralModal(false)}>
                 <X className="w-5 h-5" />
@@ -906,20 +805,19 @@ export default function ResultsDashboard({ report, images, questionnaire, onRest
             </div>
 
             {referralSuccess ? (
-              <div className="p-6 text-center space-y-3">
-                <CheckCircle2 className="w-12 h-12 text-emerald-400 mx-auto" />
-                <h4 className="text-lg font-bold text-white">Inquiry Sent Successfully!</h4>
-                <p className="text-sm text-slate-300">
-                  Your inquiry (ID: <strong>{referralSuccess.inquiry_id}</strong>) has been routed to{' '}
-                  <strong>{referralSuccess.provider_name}</strong> with your preliminary screening report
-                  attached.
+              <div className="p-8 text-center space-y-4">
+                <CheckCircle2 className="w-14 h-14 text-emerald-400 mx-auto" />
+                <h4 className="text-xl font-bold text-white">Inquiry Sent Successfully!</h4>
+                <p className="text-sm text-slate-300 max-w-md mx-auto">
+                  Your screening report (ID: <strong>{referralSuccess.inquiry_id}</strong>) has been routed to{' '}
+                  <strong className="text-emerald-300">{referralSuccess.provider_name}</strong>.
                 </p>
-                <div className="p-3 bg-slate-800 rounded-md text-xs text-slate-400 text-left">
-                  The dental clinic will reach out to <strong>{referralSuccess.patient_email}</strong> to
-                  confirm your appointment.
+                <div className="p-4 bg-slate-800/80 border border-slate-700 rounded-lg text-xs text-slate-300 max-w-md mx-auto text-left">
+                  The dental clinic has received your preliminary visual findings and will contact you at{' '}
+                  <strong className="text-cyan-300">{referralSuccess.patient_email}</strong> to confirm appointment availability.
                 </div>
                 <button
-                  className="btn-primary mt-4 mx-auto"
+                  className="btn-primary mt-4 mx-auto px-6 py-2"
                   onClick={() => {
                     setShowReferralModal(false);
                     setReferralSuccess(null);
@@ -929,104 +827,475 @@ export default function ResultsDashboard({ report, images, questionnaire, onRest
                 </button>
               </div>
             ) : (
-              <form onSubmit={handleSendReferral} className="p-2 space-y-4">
-                <p className="text-xs text-slate-300">
-                  Select a dental practice to share your preliminary screening findings (Screening ID:{' '}
-                  {screening_id}) for professional in-person clinical review.
-                </p>
+              <form onSubmit={handleSendReferral} className="flex flex-col flex-1 overflow-hidden">
+                <div className="referral-modal-body">
+                  <div className="referral-grid-layout">
+                    {/* Left Column: Location Search & Clinics List */}
+                    <div className="referral-col-left">
+                      <div className="referral-location-box">
+                        <div className="flex items-center justify-between flex-wrap gap-2">
+                          <span className="referral-section-heading">
+                            <MapPin className="w-3.5 h-3.5 text-cyan-400" />
+                            Search Dentists Near You
+                          </span>
+                          <button
+                            type="button"
+                            className="px-2.5 py-1 rounded bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 text-xs font-medium border border-cyan-500/40 transition-colors flex items-center gap-1.5 cursor-pointer"
+                            onClick={handleUseCurrentLocation}
+                            disabled={isSearchingDentists}
+                          >
+                            <Navigation className="w-3.5 h-3.5" />
+                            <span>{isSearchingDentists ? 'Detecting...' : 'Use My GPS'}</span>
+                          </button>
+                        </div>
 
-                {/* Provider Picker */}
-                <div className="space-y-2">
-                  <label className="text-xs font-semibold text-slate-300 uppercase">
-                    Select Dental Clinic
-                  </label>
-                  <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
-                    {providers.map((p) => {
-                      const isSelected = selectedProvider?.id === p.id;
-                      return (
-                        <div
-                          key={p.id}
-                          className={`provider-card ${isSelected ? 'selected' : ''}`}
-                          onClick={() => setSelectedProvider(p)}
-                        >
-                          <div className="flex justify-between items-start">
-                            <div>
-                              <div className="font-semibold text-sm text-white">{p.name}</div>
-                              <div className="text-xs text-slate-400">{p.doctor} • {p.specialty}</div>
-                            </div>
-                            <span className="text-xs font-bold text-emerald-400">★ {p.rating}</span>
+                        {/* Search Input */}
+                        <div className="flex items-center gap-2">
+                          <div className="relative flex-1">
+                            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                            <input
+                              type="text"
+                              className="w-full bg-slate-800 border border-slate-700 rounded-md pl-9 pr-3 py-1.5 text-xs text-white placeholder-slate-400 focus:outline-none focus:border-cyan-400"
+                              placeholder="City or PIN code (e.g. Bengaluru, Kochi, 560001)"
+                              value={dentistLocationInput}
+                              onChange={(e) => setDentistLocationInput(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  e.preventDefault();
+                                  handleManualLocationSearch(e);
+                                }
+                              }}
+                            />
                           </div>
-                          <div className="flex items-center gap-4 text-xs text-slate-400 mt-2">
-                            <span><MapPin className="w-3.5 h-3.5 inline mr-1 text-cyan-400" />{p.address} ({p.distance})</span>
-                            <span><Clock className="w-3.5 h-3.5 inline mr-1 text-emerald-400" />{p.next_available}</span>
+                          <button
+                            type="button"
+                            className="px-3 py-1.5 bg-cyan-600 hover:bg-cyan-500 text-white rounded-md text-xs font-medium transition-colors cursor-pointer"
+                            onClick={handleManualLocationSearch}
+                            disabled={isSearchingDentists || !dentistLocationInput.trim()}
+                          >
+                            Search
+                          </button>
+                        </div>
+
+                        {/* Quick Test Cities */}
+                        <div className="flex items-center gap-1.5 flex-wrap text-xs text-slate-400">
+                          <span className="text-[11px] text-slate-500">Quick:</span>
+                          {['Bengaluru', 'Kochi', 'Thiruvananthapuram'].map((city) => (
+                            <button
+                              key={city}
+                              type="button"
+                              className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-[11px] text-slate-300 border border-slate-700 transition-colors cursor-pointer"
+                              onClick={() => {
+                                setDentistLocationInput(city);
+                                setDentistSearchError('');
+                                setLocationPermissionDenied(false);
+                                setIsSearchingDentists(true);
+                                setActiveLocationLabel(city);
+                                setHasSearchedDentists(true);
+                                fetchProviders({ location: city, limit: 6 })
+                                  .then((list) => {
+                                    setProviders(list || []);
+                                    setSelectedProvider(list && list.length > 0 ? list[0] : null);
+                                  })
+                                  .catch(() => {
+                                    setDentistSearchError("We couldn't find dentists for this location. Please try another location.");
+                                    setProviders([]);
+                                    setSelectedProvider(null);
+                                  })
+                                  .finally(() => {
+                                    setIsSearchingDentists(false);
+                                  });
+                              }}
+                            >
+                              {city}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Status / Errors */}
+                      {isSearchingDentists && (
+                        <div className="p-3 bg-cyan-950/40 border border-cyan-500/30 rounded-lg flex items-center justify-center gap-2 text-cyan-300 text-xs">
+                          <Loader2 className="w-4 h-4 animate-spin text-cyan-400" />
+                          <span>Locating dental clinics...</span>
+                        </div>
+                      )}
+
+                      {locationPermissionDenied && (
+                        <div className="p-3 bg-amber-500/15 border border-amber-500/40 rounded-lg text-xs text-amber-200 flex items-start gap-2">
+                          <AlertTriangle className="w-4 h-4 shrink-0 text-amber-400 mt-0.5" />
+                          <div>
+                            <strong>Location Denied:</strong> Allow browser location permission or enter your city manually above.
                           </div>
                         </div>
-                      );
-                    })}
+                      )}
+
+                      {dentistSearchError && !locationPermissionDenied && (
+                        <div className="p-3 bg-red-500/15 border border-red-500/40 rounded-lg text-xs text-red-200 flex items-start gap-2">
+                          <AlertCircle className="w-4 h-4 shrink-0 text-red-400 mt-0.5" />
+                          <span>{dentistSearchError}</span>
+                        </div>
+                      )}
+
+                      {hasSearchedDentists && !isSearchingDentists && providers.length === 0 && !dentistSearchError && (
+                        <div className="p-4 bg-slate-800/80 border border-slate-700 rounded-lg text-center text-xs text-slate-300">
+                          No dental clinics found for <strong>{activeLocationLabel || 'your search'}</strong>. Try entering a larger nearby city.
+                        </div>
+                      )}
+
+                      {/* Providers List */}
+                      {providers.length > 0 && (
+                        <div className="flex flex-col gap-1.5">
+                          <div className="flex items-center justify-between">
+                            <span className="referral-section-heading">
+                              Available Clinics {activeLocationLabel ? `(${activeLocationLabel})` : ''} ({providers.length})
+                            </span>
+                            <span className="text-[11px] text-cyan-400 font-medium">Click a clinic to select</span>
+                          </div>
+
+                          <div className="referral-providers-scroll">
+                            {providers.map((p) => {
+                              const isSelected = selectedProvider?.id === p.id;
+                              return (
+                                <div
+                                  key={p.id}
+                                  className={`provider-card ${isSelected ? 'selected' : ''}`}
+                                  onClick={() => setSelectedProvider(p)}
+                                >
+                                  <div className="flex justify-between items-start gap-2">
+                                    <div className="flex-1 min-w-0">
+                                      <div className="font-semibold text-sm text-white truncate">{p.name}</div>
+                                      <div className="text-xs text-slate-400 truncate">{p.doctor || 'Clinical Team'} • {p.specialty || 'General Dentistry'}</div>
+                                    </div>
+                                    <div className="flex items-center gap-1.5 shrink-0">
+                                      <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 whitespace-nowrap">
+                                        {p.distance || 'Near you'}
+                                      </span>
+                                      <span className="text-xs font-bold text-emerald-400">★ {p.rating || '4.8'}</span>
+                                    </div>
+                                  </div>
+                                  <div className="flex items-center justify-between flex-wrap gap-2 text-xs text-slate-400 mt-2">
+                                    <span className="truncate max-w-[280px]"><MapPin className="w-3.5 h-3.5 inline mr-1 text-cyan-400 shrink-0" />{p.address}</span>
+                                    <span className="shrink-0"><Clock className="w-3.5 h-3.5 inline mr-1 text-emerald-400 shrink-0" />{p.next_available || 'Appointments open'}</span>
+                                  </div>
+                                  {p.phone && p.phone !== 'Phone on file' && (
+                                    <div className="text-[11px] text-slate-400 mt-1.5 flex items-center gap-1">
+                                      <Phone className="w-3 h-3 text-slate-400" />
+                                      <span>{p.phone}</span>
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Right Column: Selected Clinic & Referral Form */}
+                    <div className="referral-col-right">
+                      {/* Selected Clinic Preview */}
+                      <div className="referral-selected-summary">
+                        <span className="text-xs font-bold text-emerald-400 uppercase tracking-wider flex items-center gap-1.5">
+                          <CheckCircle2 className="w-4 h-4" />
+                          Selected Dental Clinic
+                        </span>
+                        {selectedProvider ? (
+                          <div className="mt-1">
+                            <div className="font-bold text-base text-white">{selectedProvider.name}</div>
+                            <div className="text-xs text-cyan-300 mt-0.5">{selectedProvider.doctor || 'Senior Dental Surgeon'} • {selectedProvider.specialty}</div>
+                            <div className="text-xs text-slate-300 mt-1 flex items-center gap-1">
+                              <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                              <span className="truncate">{selectedProvider.address}</span>
+                            </div>
+                            {selectedProvider.phone && selectedProvider.phone !== 'Phone on file' && (
+                              <div className="mt-2 pt-2 border-t border-emerald-500/20 flex items-center justify-between">
+                                <span className="text-xs text-slate-400">Direct Line:</span>
+                                <a
+                                  href={`tel:${selectedProvider.phone}`}
+                                  className="text-xs text-emerald-400 font-semibold hover:underline flex items-center gap-1"
+                                >
+                                  <Phone className="w-3 h-3" />
+                                  {selectedProvider.phone}
+                                </a>
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="text-xs text-slate-400 italic py-2">
+                            Please select a dental clinic from the list on the left to proceed.
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Contact Form */}
+                      <div className="referral-form-box">
+                        <span className="referral-section-heading">Patient Contact Details</span>
+
+                        <div>
+                          <label className="text-xs font-semibold text-slate-300 block mb-1">
+                            Full Name *
+                          </label>
+                          <input
+                            type="text"
+                            className="form-input-text"
+                            required
+                            placeholder="Your full name"
+                            value={patientName}
+                            onChange={(e) => setPatientName(e.target.value)}
+                          />
+                        </div>
+
+                        <div>
+                          <label className="text-xs font-semibold text-slate-300 block mb-1">
+                            Email Address *
+                          </label>
+                          <input
+                            type="email"
+                            className="form-input-text"
+                            required
+                            placeholder="your.email@example.com"
+                            value={patientEmail}
+                            onChange={(e) => setPatientEmail(e.target.value)}
+                          />
+                        </div>
+
+                        <div>
+                          <label className="text-xs font-semibold text-slate-300 block mb-1">
+                            Phone Number (Optional)
+                          </label>
+                          <input
+                            type="tel"
+                            className="form-input-text"
+                            placeholder="+91 98765 43210"
+                            value={patientPhone}
+                            onChange={(e) => setPatientPhone(e.target.value)}
+                          />
+                        </div>
+
+                        <div className="p-2.5 bg-slate-900/60 rounded border border-slate-700/60 text-[11px] text-slate-400">
+                          🔒 <strong>Privacy Note:</strong> Your preliminary screening report (Score: {score}/100, ID: {screening_id}) will be shared directly with the clinic to facilitate your appointment.
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </div>
 
-                {/* Patient Information Inputs */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
-                  <div>
-                    <label className="text-xs font-semibold text-slate-300 block mb-1">
-                      Full Name *
-                    </label>
-                    <input
-                      type="text"
-                      className="form-input-text"
-                      required
-                      placeholder="Jane Doe"
-                      value={patientName}
-                      onChange={(e) => setPatientName(e.target.value)}
-                    />
+                {/* Fixed Modal Footer */}
+                <div className="referral-modal-footer">
+                  <div className="text-xs text-slate-400">
+                    {selectedProvider ? (
+                      <span>Ready to refer to <strong className="text-white">{selectedProvider.name}</strong></span>
+                    ) : (
+                      <span className="text-amber-400">Select a clinic above to enable referral submission</span>
+                    )}
                   </div>
-                  <div>
-                    <label className="text-xs font-semibold text-slate-300 block mb-1">
-                      Email Address *
-                    </label>
-                    <input
-                      type="email"
-                      className="form-input-text"
-                      required
-                      placeholder="jane@example.com"
-                      value={patientEmail}
-                      onChange={(e) => setPatientEmail(e.target.value)}
-                    />
-                  </div>
-                  <div className="sm:col-span-2">
-                    <label className="text-xs font-semibold text-slate-300 block mb-1">
-                      Phone Number (Optional)
-                    </label>
-                    <input
-                      type="tel"
-                      className="form-input-text"
-                      placeholder="(555) 000-0000"
-                      value={patientPhone}
-                      onChange={(e) => setPatientPhone(e.target.value)}
-                    />
-                  </div>
-                </div>
 
-                <div className="evidence-modal-footer mt-4">
-                  <button
-                    type="button"
-                    className="btn-secondary-sm"
-                    onClick={() => setShowReferralModal(false)}
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    className="btn-primary"
-                    disabled={isSubmittingReferral}
-                  >
-                    <Send className="w-4 h-4" />
-                    <span>{isSubmittingReferral ? 'Submitting...' : 'Send Screening to Clinic'}</span>
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      className="btn-secondary-sm"
+                      onClick={() => setShowReferralModal(false)}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      className="btn-primary"
+                      disabled={isSubmittingReferral || !selectedProvider}
+                    >
+                      <Send className="w-4 h-4" />
+                      <span>{isSubmittingReferral ? 'Sending...' : 'Send Screening to Clinic'}</span>
+                    </button>
+                  </div>
                 </div>
               </form>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Dentist-Ready Clinical Summary Report Modal */}
+      {showReportModal && (
+        <div className="evidence-modal-backdrop" onClick={() => setShowReportModal(false)}>
+          <div className="report-modal-card" onClick={(e) => e.stopPropagation()}>
+            <div className="report-modal-header">
+              <div className="flex items-center gap-2">
+                <FileText className="w-5 h-5 text-cyan-400" />
+                <h3 className="evidence-modal-title" style={{ margin: 0, color: '#fff' }}>
+                  Dentist-Ready Clinical Summary Report
+                </h3>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  className="btn-secondary-sm flex items-center gap-1.5"
+                  onClick={handlePrint}
+                  title="Print Report or Save as PDF"
+                >
+                  <Printer className="w-4 h-4" />
+                  <span>Print / PDF</span>
+                </button>
+                <button
+                  type="button"
+                  className="btn-secondary-sm flex items-center gap-1.5"
+                  onClick={handleOpenNewWindow}
+                  title="Open report in separate browser tab"
+                >
+                  <ExternalLink className="w-4 h-4" />
+                  <span>Open Full Page</span>
+                </button>
+                <button className="btn-icon-close" onClick={() => setShowReportModal(false)}>
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            <div className="report-modal-body">
+              {/* Header */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '2px solid #0284c7', paddingBottom: '16px', marginBottom: '20px' }}>
+                <div>
+                  <h2 style={{ margin: 0, fontSize: '20px', fontWeight: 800, color: '#0369a1' }}>
+                    OralAI — Preventive Oral Health Screening Summary
+                  </h2>
+                  <div style={{ fontSize: '13px', color: '#64748b', marginTop: '4px' }}>
+                    Screening ID: <strong>{screening_id}</strong> • Date: {new Date(created_at).toLocaleDateString()}
+                    {currentUser?.name && ` • Patient: ${currentUser.name}`}
+                  </div>
+                  <div style={{ fontSize: '12px', color: '#0284c7', fontWeight: 600, marginTop: '2px' }}>
+                    5-View Guided Visual Screening Assessment
+                  </div>
+                </div>
+                <div style={{ background: '#f0f9ff', border: '2px solid #0284c7', borderRadius: '8px', padding: '10px 18px', textAlign: 'center', minWidth: '90px' }}>
+                  <div style={{ fontSize: '28px', fontWeight: 800, color: '#0284c7', lineHeight: 1 }}>{score}</div>
+                  <div style={{ fontSize: '10px', fontWeight: 700, color: '#0369a1', textTransform: 'uppercase', marginTop: '4px' }}>
+                    / 100 Score
+                  </div>
+                </div>
+              </div>
+
+              {/* Section 1: Visual Findings */}
+              <div style={{ fontSize: '14px', fontWeight: 700, color: '#1e293b', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '8px' }}>
+                1. AI Visual Findings by Category
+              </div>
+              <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '20px', fontSize: '13px' }}>
+                <thead>
+                  <tr style={{ background: '#f8fafc', borderBottom: '2px solid #cbd5e1' }}>
+                    <th style={{ padding: '8px 10px', textAlign: 'left', color: '#475569', width: '25%' }}>Category</th>
+                    <th style={{ padding: '8px 10px', textAlign: 'left', color: '#475569', width: '45%' }}>Visible Observation</th>
+                    <th style={{ padding: '8px 10px', textAlign: 'center', color: '#475569', width: '15%' }}>Severity</th>
+                    <th style={{ padding: '8px 10px', textAlign: 'center', color: '#475569', width: '15%' }}>Confidence</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {categories.map((cat) => {
+                    const sev = cat.data?.severity || 'none';
+                    return (
+                      <tr key={cat.key} style={{ borderBottom: '1px solid #e2e8f0' }}>
+                        <td style={{ padding: '8px 10px', fontWeight: 600, color: '#1e293b' }}>{cat.title}</td>
+                        <td style={{ padding: '8px 10px', color: '#334155' }}>{cat.data?.finding || 'No notable indicators'}</td>
+                        <td style={{ padding: '8px 10px', textAlign: 'center' }}>
+                          <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 600, textTransform: 'capitalize', background: sev === 'none' ? '#dcfce7' : '#fef3c7', color: sev === 'none' ? '#15803d' : '#b45309' }}>
+                            {sev}
+                          </span>
+                        </td>
+                        <td style={{ padding: '8px 10px', textAlign: 'center', color: '#64748b' }}>
+                          {Math.round((cat.data?.confidence || 0.85) * 100)}%
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+
+              {/* Section 2: Care Pathway */}
+              {care_pathway && care_pathway.length > 0 && (
+                <>
+                  <div style={{ fontSize: '14px', fontWeight: 700, color: '#1e293b', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '8px' }}>
+                    2. Suggested Care Pathway
+                  </div>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '20px', fontSize: '13px' }}>
+                    <thead>
+                      <tr style={{ background: '#f8fafc', borderBottom: '2px solid #cbd5e1' }}>
+                        <th style={{ padding: '8px 10px', textAlign: 'left', color: '#475569', width: '30%' }}>Step</th>
+                        <th style={{ padding: '8px 10px', textAlign: 'left', color: '#475569', width: '22%' }}>Specialist</th>
+                        <th style={{ padding: '8px 10px', textAlign: 'center', color: '#475569', width: '18%' }}>Urgency</th>
+                        <th style={{ padding: '8px 10px', textAlign: 'left', color: '#475569', width: '30%' }}>Recommended Action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {care_pathway.map((step, idx) => (
+                        <tr key={idx} style={{ borderBottom: '1px solid #e2e8f0' }}>
+                          <td style={{ padding: '8px 10px', fontWeight: 600, color: '#1e293b' }}>{step.title}</td>
+                          <td style={{ padding: '8px 10px', color: '#0284c7', fontWeight: 600 }}>{step.recommended_specialist}</td>
+                          <td style={{ padding: '8px 10px', textAlign: 'center' }}>
+                            <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 600, background: '#fef3c7', color: '#92400e' }}>
+                              {step.urgency}
+                            </span>
+                          </td>
+                          <td style={{ padding: '8px 10px', color: '#334155' }}>{step.action}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </>
+              )}
+
+              {/* Section 3: Cost Estimates */}
+              {estimated_costs && estimated_costs.length > 0 && (
+                <>
+                  <div style={{ fontSize: '14px', fontWeight: 700, color: '#1e293b', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '8px' }}>
+                    3. Indicative Dental Cost Estimates (₹ INR)
+                  </div>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '20px', fontSize: '13px' }}>
+                    <thead>
+                      <tr style={{ background: '#f8fafc', borderBottom: '2px solid #cbd5e1' }}>
+                        <th style={{ padding: '8px 10px', textAlign: 'left', color: '#475569', width: '45%' }}>Procedure / Service</th>
+                        <th style={{ padding: '8px 10px', textAlign: 'left', color: '#475569', width: '25%' }}>Category</th>
+                        <th style={{ padding: '8px 10px', textAlign: 'right', color: '#475569', width: '30%' }}>Indicative Range (₹)</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {estimated_costs.map((c, idx) => (
+                        <tr key={idx} style={{ borderBottom: '1px solid #e2e8f0' }}>
+                          <td style={{ padding: '8px 10px', fontWeight: 600, color: '#1e293b' }}>{c.service}</td>
+                          <td style={{ padding: '8px 10px', color: '#64748b', textTransform: 'capitalize' }}>{(c.category || '').replace('_', ' ')}</td>
+                          <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 700, color: '#059669' }}>{c.cost_range}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </>
+              )}
+
+              {/* Medical Notice */}
+              <div style={{ background: '#fffbeb', border: '1px solid #fef3c7', borderLeft: '4px solid #f59e0b', padding: '12px 16px', fontSize: '12px', color: '#92400e', borderRadius: '4px', marginTop: '16px' }}>
+                <strong>Non-Diagnostic Medical Notice:</strong> This preliminary visual screening report was generated using photographic analysis and deterministic scoring for educational and conversational preparation with your dental provider. It is NOT a medical diagnosis and cannot substitute for an in-person dental exam, radiographs, or periodontal probing.
+              </div>
+            </div>
+
+            <div className="report-modal-footer">
+              <span className="text-xs text-slate-400">
+                Ready to share with your dentist or save for personal records
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  className="btn-secondary-sm"
+                  onClick={() => setShowReportModal(false)}
+                >
+                  Close
+                </button>
+                <button
+                  type="button"
+                  className="btn-primary-sm flex items-center gap-1.5"
+                  onClick={handlePrint}
+                >
+                  <Printer className="w-4 h-4" />
+                  <span>Print / Save PDF</span>
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

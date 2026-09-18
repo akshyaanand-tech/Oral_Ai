@@ -289,10 +289,83 @@ export async function compareScreenings(previousId, currentId) {
 }
 
 /**
- * Fetch verified dental providers for referral.
+ * User Authentication API
  */
-export async function fetchProviders(query = '') {
-  const url = query ? `${API_BASE}/api/providers?query=${encodeURIComponent(query)}` : `${API_BASE}/api/providers`;
+export async function registerUser(name, email, password) {
+  const res = await fetch(`${API_BASE}/api/auth/register`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, email, password }),
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.detail || 'Registration failed. Please check your details.');
+  }
+  return data;
+}
+
+export async function loginUser(email, password) {
+  const res = await fetch(`${API_BASE}/api/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password }),
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.detail || 'Invalid email or password.');
+  }
+  return data;
+}
+
+export async function getCurrentUser(token) {
+  if (!token) return null;
+  const res = await fetch(`${API_BASE}/api/auth/me`, {
+    headers: { 'Authorization': `Bearer ${token}` },
+  });
+  if (!res.ok) throw new Error('Session expired');
+  return await res.json();
+}
+
+export async function forgotPassword(email) {
+  const res = await fetch(`${API_BASE}/api/auth/forgot-password`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email }),
+  });
+  return await res.json();
+}
+
+/**
+ * Fetch verified real dental providers for referral.
+ * Supports:
+ * - Geolocation coordinates: { latitude, longitude }
+ * - Manual location: { location: "Thiruvananthapuram" }
+ * - Direct location string
+ */
+export async function fetchProviders(params = {}) {
+  const queryParams = new URLSearchParams();
+  if (typeof params === 'string') {
+    if (params.trim()) queryParams.set('location', params.trim());
+  } else if (params && typeof params === 'object') {
+    if (params.location && params.location.trim()) {
+      queryParams.set('location', params.location.trim());
+    }
+    if (params.latitude !== undefined && params.latitude !== null) {
+      queryParams.set('latitude', params.latitude);
+    }
+    if (params.longitude !== undefined && params.longitude !== null) {
+      queryParams.set('longitude', params.longitude);
+    }
+    if (params.specialty) {
+      queryParams.set('specialty', params.specialty);
+    }
+    if (params.limit) {
+      queryParams.set('limit', params.limit);
+    }
+  }
+
+  const qs = queryParams.toString();
+  const url = qs ? `${API_BASE}/api/providers?${qs}` : `${API_BASE}/api/providers`;
   const res = await fetch(url);
   if (!res.ok) throw new Error(`Providers fetch failed (${res.status})`);
   return await res.json();

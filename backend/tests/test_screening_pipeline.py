@@ -207,13 +207,13 @@ def test_cost_service_ranges_and_currency():
     ]
     pathway = create_care_pathway(steps)
 
-    # US query (default)
-    us_costs = estimate_costs(pathway, location="Boston")
-    assert len(us_costs) >= 1
-    for c in us_costs:
-        assert c.currency == "USD"
+    # Cost query for location
+    city_costs = estimate_costs(pathway, location="Boston")
+    assert len(city_costs) >= 1
+    for c in city_costs:
+        assert c.currency == "INR"
         assert c.min_cost <= c.max_cost
-        assert c.cost_range.startswith("$")
+        assert "₹" in c.cost_range
         assert c.indicative is True
 
     # India PIN query (e.g. Bengaluru 560001)
@@ -240,9 +240,9 @@ def test_provider_service_by_city_and_pin():
     assert len(blr_providers) > 0
     assert any("bengaluru" in p.city.lower() or "560034" in str(p.pin_code) for p in blr_providers)
 
-    # Test Unmatched location falls back gracefully without errors
+    # Test Unmatched location returns empty list (honest data integrity, no fabricated dentists)
     remote_providers = find_providers(location="NonExistentCity999")
-    assert len(remote_providers) > 0
+    assert len(remote_providers) == 0
 
 
 # ── 6. Scoring Service Tests ─────────────────────────────────────────────────

@@ -29,8 +29,8 @@ class CostEstimate(BaseModel):
     category: str = Field(..., description="Relevant clinical category")
     min_cost: float = Field(..., description="Lower bound indicative estimate")
     max_cost: float = Field(..., description="Upper bound indicative estimate")
-    currency: str = Field("USD", description="Currency ISO code")
-    cost_range: str = Field(..., description="Formatted indicative range string (e.g. '$50 - $120')")
+    currency: str = Field("INR", description="Currency ISO code")
+    cost_range: str = Field(..., description="Formatted indicative range string (e.g. '₹500 - ₹1,200')")
     notes: str = Field(..., description="Transparency notes and procedure description")
     indicative: bool = Field(True, description="Always true; costs are non-guaranteed estimates")
 
@@ -50,4 +50,6 @@ class ProviderInfo(BaseModel):
     accepting_new_patients: bool = Field(True, description="Whether practice is accepting new patients")
     next_available: Optional[str] = Field(None, description="Estimated next available appointment slot")
     distance: Optional[str] = Field(None, description="Approximate distance if location-matched")
-    source: str = Field("fallback_database", description="'live_api' or 'fallback_database'")
+    latitude: Optional[float] = Field(None, description="Clinic latitude")
+    longitude: Optional[float] = Field(None, description="Clinic longitude")
+    source: str = Field("live_api", description="'live_api' or 'location_provider'")

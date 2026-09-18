@@ -37,7 +37,7 @@ async def lifespan(app: FastAPI):
     except Exception as db_err:
         logger.error("Database initialization failed: %s", db_err)
 
-    mock_mode = os.getenv("MOCK_AI", "true").lower() in ("true", "1", "yes")
+    mock_mode = os.getenv("MOCK_AI", "false").lower() in ("true", "1", "yes")
     logger.info("Initializing Dental Screening Backend (MOCK_AI=%s)", mock_mode)
     if mock_mode:
         logger.info("MOCK_AI is ENABLED: Gemini API calls are mocked with deterministic findings.")

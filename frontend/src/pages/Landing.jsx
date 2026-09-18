@@ -4,7 +4,6 @@ import {
   Clock,
   Sparkles,
   ChevronRight,
-  Zap,
   Eye,
   BarChart3,
   History,
@@ -84,18 +83,8 @@ export default function Landing({ onStart, onQuickDemo }) {
         {/* CTA Buttons */}
         <div className="hero-actions">
           <button className="btn-primary" onClick={onStart} id="start-screening-btn">
-            <span>Start Screening</span>
+            <span>Start Real Screening</span>
             <ChevronRight className="w-5 h-5" />
-          </button>
-
-          <button
-            className="btn-secondary"
-            onClick={onQuickDemo}
-            id="quick-demo-btn"
-            title="Run instant demo with pre-calibrated test images"
-          >
-            <Zap className="w-4 h-4 text-amber-400" />
-            <span>Try 1-Click Demo Set</span>
           </button>
         </div>
       </section>

@@ -1,5 +1,5 @@
 import React from 'react';
-import { CheckCircle2, AlertCircle, RefreshCw, ArrowRight, ArrowLeft, Sparkles, Zap } from 'lucide-react';
+import { CheckCircle2, AlertCircle, RefreshCw, ArrowRight, ArrowLeft, Sparkles } from 'lucide-react';
 import MedicalDisclaimer from '../components/MedicalDisclaimer';
 
 const VIEWS_INFO = [
@@ -22,16 +22,6 @@ export default function ReviewAll({ images, onRetakeView, onSubmit, onBack, onFi
             <div className="badge-step">FINAL REVIEW</div>
             <h2 className="review-title">Review Captured Dental Views</h2>
           </div>
-          {missingViews.length > 0 && (
-            <button
-              className="btn-secondary-sm"
-              onClick={onFillMissingWithDemo}
-              title="Populate missing angles with test photographs"
-            >
-              <Zap className="w-4 h-4 text-amber-400" />
-              <span>Fill Missing with Demo Photos</span>
-            </button>
-          )}
         </div>
 
         <p className="review-sub">
@@ -102,7 +92,7 @@ export default function ReviewAll({ images, onRetakeView, onSubmit, onBack, onFi
             <div>
               <strong>Missing Views: </strong>
               <span>
-                Please capture the remaining views ({missingViews.map((m) => m.label).join(', ')}) or click "Fill Missing with Demo Photos" to test.
+                Please go back and capture the remaining views ({missingViews.map((m) => m.label).join(', ')}) before submitting.
               </span>
             </div>
           </div>

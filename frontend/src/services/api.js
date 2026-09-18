@@ -96,10 +96,24 @@ export async function analyzeDentalImages(images, questionnaire = null) {
     formData.append('questionnaire', JSON.stringify(questionnaire));
   }
 
-  const response = await fetch(`${API_BASE}/api/analyze`, {
-    method: 'POST',
-    body: formData,
-  });
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 180000); // 180s timeout — Gemini vision with 5 images + model fallback can take up to 2 min
+
+  let response;
+  try {
+    response = await fetch(`${API_BASE}/api/analyze`, {
+      method: 'POST',
+      body: formData,
+      signal: controller.signal,
+    });
+  } catch (err) {
+    clearTimeout(timeoutId);
+    if (err.name === 'AbortError') {
+      throw new Error('Analysis timed out after 3 minutes. Gemini may be under high demand — please try again in 30 seconds.');
+    }
+    throw err;
+  }
+  clearTimeout(timeoutId);
 
   if (!response.ok) {
     let errorDetail = 'We could not process your screening images. Please try again.';

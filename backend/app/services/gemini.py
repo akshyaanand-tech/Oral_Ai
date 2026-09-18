@@ -1,20 +1,25 @@
-"""
-Gemini Vision service.
-
-Sends dental images to Google Gemini for preliminary visual screening analysis.
-When MOCK_AI=true, returns deterministic sample findings instead.
-Strictly adheres to non-diagnostic, explainable, and medical safety principles.
-"""
-
+import io
 import os
 import re
 import json
+import time
 import logging
 from typing import Dict, Any
 
 from app.schemas.analysis import DentalFindings, FindingDetail, Severity, Evidence, BoundingBox
 
 logger = logging.getLogger(__name__)
+
+# ── Fallback model chain ──────────────────────────────────────────────────────
+# Tried in order; skips to the next on 503 / UNAVAILABLE / high-demand errors.
+# Only use real, verified Google Gemini model identifiers here.
+FALLBACK_MODELS = [
+    "gemini-3.5-flash",       # Try 3.5 first — often less loaded than 3.6
+    "gemini-3.6-flash",       # Recommended for new users
+    "gemini-3.7-flash",
+    "gemini-3.1-flash-lite",  # Lightest model — fastest fallback
+    "gemini-2.5-flash",       # Legacy — may fail for new API keys
+]
 
 # ── Upgraded Strict Screening Prompt ─────────────────────────────────────────
 ANALYSIS_PROMPT = """
@@ -127,9 +132,10 @@ def analyze_images(images: Dict[str, bytes]) -> DentalFindings:
     Analyze five dental images.
 
     If MOCK_AI=true, returns deterministic mock findings.
-    Otherwise calls Google Gemini Vision API.
+    Otherwise calls Google Gemini Vision API with automatic model fallback.
     """
-    mock_mode = os.getenv("MOCK_AI", "true").lower() in ("true", "1", "yes")
+    # Default to LIVE AI. Mock mode only activates when MOCK_AI is explicitly set to true/1/yes.
+    mock_mode = os.getenv("MOCK_AI", "false").lower() in ("true", "1", "yes")
 
     if mock_mode:
         logger.info("MOCK_AI enabled — returning deterministic sample findings")
@@ -149,6 +155,38 @@ def _detect_mime(data: bytes) -> str:
     return "image/jpeg"
 
 
+# ── Image compression ─────────────────────────────────────────────────────────
+_MAX_DIM = 800       # max width or height in pixels
+_JPEG_QUALITY = 85   # JPEG quality (85 keeps dental detail, cuts size ~75-80%)
+
+
+def _compress_image(data: bytes) -> bytes:
+    """Resize to _MAX_DIM x _MAX_DIM and re-encode as JPEG to shrink payload."""
+    try:
+        from PIL import Image
+        with Image.open(io.BytesIO(data)) as img:
+            if img.mode not in ("RGB", "L"):
+                img = img.convert("RGB")
+            img.thumbnail((_MAX_DIM, _MAX_DIM), Image.Resampling.LANCZOS)
+            buf = io.BytesIO()
+            img.save(buf, format="JPEG", quality=_JPEG_QUALITY, optimize=True)
+            compressed = buf.getvalue()
+            logger.debug(
+                "Compressed image: %d KB → %d KB",
+                len(data) // 1024,
+                len(compressed) // 1024,
+            )
+            return compressed
+    except Exception as exc:
+        logger.warning("Image compression failed (%s) — using original bytes", exc)
+        return data
+
+
+def _compress_images(images: Dict[str, bytes]) -> Dict[str, bytes]:
+    """Compress all five dental images before sending to the API."""
+    return {view: _compress_image(data) for view, data in images.items()}
+
+
 def _extract_json_text(text: str) -> str:
     """Extract raw JSON from possible markdown code blocks or surrounding text."""
     text = text.strip()
@@ -160,6 +198,27 @@ def _extract_json_text(text: str) -> str:
     if start != -1 and end != -1 and end > start:
         return text[start:end + 1]
     return text
+
+
+def _is_transient(error_msg: str) -> bool:
+    """Return True if the error should be skipped to try the next fallback model.
+
+    Covers:
+    - 503 / UNAVAILABLE / high-demand: temporary server overload
+    - 404 'no longer available': model has been deprecated by Google
+    """
+    transient_markers = (
+        "503", "UNAVAILABLE", "high demand", "overloaded", "try again later",
+        # Deprecated / non-existent model — treat as skippable so the chain continues
+        "no longer available", "404", "not found", "invalid model",
+    )
+    lower = error_msg.lower()
+    return any(m.lower() in lower for m in transient_markers)
+
+
+# ── Per-model retry settings ──────────────────────────────────────────────────
+_MAX_RETRIES_PER_MODEL = 2   # 2 attempts per model before moving to next (fail fast)
+_RETRY_BASE_SLEEP = 1        # seconds (1s, 2s) — short sleep so we reach a working model quickly
 
 
 def _call_gemini(images: Dict[str, bytes]) -> DentalFindings:
@@ -175,44 +234,86 @@ def _call_gemini(images: Dict[str, bytes]) -> DentalFindings:
 
     client = genai.Client(api_key=api_key)
 
-    # Build content parts: prompt text + 5 images
-    parts = [genai_types.Part.from_text(text=ANALYSIS_PROMPT)]
+    # ── Compress all images before building parts (reduces payload ~75-80%) ──
+    compressed = _compress_images(images)
+    logger.info(
+        "Image compression complete. Sizes (KB): %s",
+        {v: len(b) // 1024 for v, b in compressed.items()},
+    )
 
+    # Build content parts: prompt text + 5 compressed JPEG images
+    parts = [genai_types.Part.from_text(text=ANALYSIS_PROMPT)]
     image_order = ["front", "left", "right", "upper", "lower"]
     for view in image_order:
-        img_bytes = images.get(view)
+        img_bytes = compressed.get(view)
         if img_bytes:
-            mime = _detect_mime(img_bytes)
-            parts.append(
-                genai_types.Part.from_bytes(data=img_bytes, mime_type=mime)
-            )
+            parts.append(genai_types.Part.from_bytes(data=img_bytes, mime_type="image/jpeg"))
 
-    model_name = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
-    logger.info("Calling Gemini model: %s", model_name)
+    # Build model list: env override goes first, then the fallback chain
+    env_model = os.getenv("GEMINI_MODEL", "").strip()
+    models_to_try = ([env_model] if env_model and env_model not in FALLBACK_MODELS else []) + FALLBACK_MODELS
 
-    try:
-        response = client.models.generate_content(
-            model=model_name,
-            contents=parts,
-            config=genai_types.GenerateContentConfig(
-                temperature=0.1,
-                response_mime_type="application/json",
-            )
-        )
-        response_text = response.text or ""
-    except Exception as exc:
-        logger.error("Gemini API call failed: %s", exc)
-        raise RuntimeError(f"Gemini API request failed: {exc}") from exc
+    last_exception: Exception | None = None
 
-    clean_json = _extract_json_text(response_text)
-    try:
-        data = json.loads(clean_json)
-    except json.JSONDecodeError as exc:
-        logger.error("Failed to parse JSON from Gemini response: %s\nRaw output: %s", exc, response_text)
-        raise ValueError("Model output was not valid JSON.") from exc
+    for model_name in models_to_try:
+        # ── Per-model retry loop with exponential backoff for 503s ────────────
+        for attempt in range(1, _MAX_RETRIES_PER_MODEL + 1):
+            logger.info("Model %s — attempt %d/%d", model_name, attempt, _MAX_RETRIES_PER_MODEL)
+            try:
+                response = client.models.generate_content(
+                    model=model_name,
+                    contents=parts,
+                    config=genai_types.GenerateContentConfig(
+                        temperature=0.1,
+                        response_mime_type="application/json",
+                    ),
+                )
+                response_text = response.text or ""
 
-    try:
-        return DentalFindings.model_validate(data)
-    except Exception as exc:
-        logger.error("Findings failed Pydantic schema validation: %s\nData: %s", exc, data)
-        raise ValueError("AI output did not match expected findings schema.") from exc
+                clean_json = _extract_json_text(response_text)
+                try:
+                    data = json.loads(clean_json)
+                except json.JSONDecodeError as exc:
+                    logger.error(
+                        "Failed to parse JSON from Gemini response: %s\nRaw output: %s",
+                        exc, response_text,
+                    )
+                    raise ValueError("Model output was not valid JSON.") from exc
+
+                try:
+                    return DentalFindings.model_validate(data)
+                except Exception as exc:
+                    logger.error("Findings failed Pydantic schema validation: %s\nData: %s", exc, data)
+                    raise ValueError("AI output did not match expected findings schema.") from exc
+
+            except Exception as exc:
+                error_msg = str(exc)
+                last_exception = exc
+
+                if _is_transient(error_msg):
+                    if attempt < _MAX_RETRIES_PER_MODEL:
+                        sleep_time = _RETRY_BASE_SLEEP * attempt  # 3s, 6s
+                        logger.warning(
+                            "Model %s overloaded (attempt %d/%d). Retrying in %ds... [%s]",
+                            model_name, attempt, _MAX_RETRIES_PER_MODEL,
+                            sleep_time, error_msg[:100],
+                        )
+                        time.sleep(sleep_time)
+                        continue  # retry same model
+                    else:
+                        logger.warning(
+                            "Model %s failed all %d attempts — falling to next model. [%s]",
+                            model_name, _MAX_RETRIES_PER_MODEL, error_msg[:100],
+                        )
+                        break  # exhaust retries → next model
+
+                # Non-transient (bad API key, schema error, etc.) — fail fast
+                logger.error("Non-transient error on model %s: %s", model_name, error_msg)
+                raise
+
+    raise RuntimeError(
+        "All Gemini models are temporarily unavailable (503 / high demand). "
+        "Please wait 30 seconds and try again."
+    ) from last_exception
+
+

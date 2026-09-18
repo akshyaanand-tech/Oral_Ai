@@ -117,7 +117,9 @@ export default function CameraCapture({ images, initialViewIndex = 0, onImageUpd
 
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
-        videoRef.current.play();
+        videoRef.current.play().catch((e) => {
+          if (e.name !== 'AbortError') console.warn('Video play error:', e);
+        });
         setCameraActive(true);
       }
     } catch (err) {

@@ -35,7 +35,7 @@ export default function Processing() {
 
         <h2 className="processing-title">Preparing your screening...</h2>
         <p className="processing-subtitle">
-          Executing image enhancement, two-stage technical quality check, and AI visual screening across all 5 views.
+          Executing image enhancement, two-stage quality check, and live Gemini AI vision screening. This typically takes <strong>30–90 seconds</strong> — please keep this window open.
         </p>
 
         {/* Steps List */}

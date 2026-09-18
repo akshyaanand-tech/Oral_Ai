@@ -1,0 +1,42 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.pdb
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# Secrets / environment
+.env
+*.env.local
+
+# Node / frontend
+node_modules/
+dist/
+dist-ssr/
+*.local
+
+# Build artifacts
+*.egg-info/
+build/
+*.whl
+
+# OS / Editor
+.DS_Store
+.vscode/*
+!.vscode/extensions.json
+*.suo
+*.sln
+*.sw?
+Thumbs.db
+
+# SQLite DB (local dev data)
+*.db
+*.sqlite3

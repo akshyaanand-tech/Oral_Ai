@@ -16,6 +16,8 @@ from app.routes.analyze import router as analyze_router
 from app.routes.quality import router as quality_router
 from app.routes.enhancement import router as enhancement_router
 from app.routes.screenings import router as screenings_router
+from app.routes.screening import router as screening_router
+from app.routes.providers import router as providers_router
 from app.services.db import init_db
 
 # Load environment variables from .env file
@@ -85,6 +87,8 @@ app.include_router(quality_router)
 app.include_router(enhancement_router)
 app.include_router(analyze_router)
 app.include_router(screenings_router)
+app.include_router(screening_router)
+app.include_router(providers_router)
 
 
 @app.get("/", include_in_schema=False)

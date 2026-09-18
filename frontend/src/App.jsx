@@ -6,7 +6,7 @@ import CameraCapture from './pages/CameraCapture';
 import ReviewAll from './pages/ReviewAll';
 import Processing from './pages/Processing';
 import ResultsDashboard from './pages/ResultsDashboard';
-import { checkHealth, analyzeDentalImages } from './services/api';
+import { checkHealth, analyzeDentalImages, screenOralHealth } from './services/api';
 import { getAllSampleDentalImages } from './utils/sampleImages';
 import { AlertCircle, X } from 'lucide-react';
 
@@ -15,7 +15,7 @@ export default function App() {
   const [backendStatus, setBackendStatus] = useState(null);
   const [errorMsg, setErrorMsg] = useState(null);
 
-  // 6 Standard Questionnaire responses (Section 13)
+  // Questionnaire responses with City/PIN code support
   const [questionnaire, setQuestionnaire] = useState({
     tooth_sensitivity: 'none',
     pain_discomfort: 'none',
@@ -23,6 +23,7 @@ export default function App() {
     teeth_or_gum_changes: 'none',
     last_dental_visit: '6_to_12_months',
     specific_concern: '',
+    location: 'Boston',
   });
 
   // 5 Dental images
@@ -87,8 +88,16 @@ export default function App() {
       const samples = await getAllSampleDentalImages();
       setImages(samples);
 
-      // Submit sample images + questionnaire to backend
-      const result = await analyzeDentalImages(samples, questionnaire);
+      // Submit sample images + location to /api/screen endpoint
+      const loc = questionnaire.location || 'Boston';
+      let result;
+      try {
+        result = await screenOralHealth(samples, loc, questionnaire);
+      } catch (screenErr) {
+        console.warn('screenOralHealth fallback to analyzeDentalImages:', screenErr);
+        result = await analyzeDentalImages(samples, questionnaire);
+      }
+
       setReport(result);
       setStep('results');
     } catch (err) {
@@ -104,7 +113,16 @@ export default function App() {
     setStep('processing');
 
     try {
-      const result = await analyzeDentalImages(images, questionnaire);
+      const loc = questionnaire.location || 'Boston';
+      let result;
+      try {
+        result = await screenOralHealth(images, loc, questionnaire);
+      } catch (screenErr) {
+        if (screenErr.retake) throw screenErr;
+        console.warn('screenOralHealth fallback to analyzeDentalImages:', screenErr);
+        result = await analyzeDentalImages(images, questionnaire);
+      }
+
       setReport(result);
       setStep('results');
     } catch (err) {

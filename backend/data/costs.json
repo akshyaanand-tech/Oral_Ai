@@ -1,0 +1,97 @@
+{
+  "version": "1.0",
+  "disclaimer": "Cost ranges are indicative estimates for informational purposes only. Actual fees vary based on clinical diagnosis, provider qualifications, and geographic location.",
+  "currencies": {
+    "default": "USD",
+    "supported": ["USD", "INR", "GBP", "EUR"]
+  },
+  "procedures": [
+    {
+      "code": "routine_exam",
+      "service": "Comprehensive Oral Examination",
+      "category": "preventive",
+      "min_cost": 35.0,
+      "max_cost": 85.0,
+      "currency": "USD",
+      "unit": "visit",
+      "notes": "Visual clinical examination by general dental practitioner."
+    },
+    {
+      "code": "prophylaxis_cleaning",
+      "service": "Professional Dental Cleaning / Prophylaxis",
+      "category": "discoloration",
+      "min_cost": 75.0,
+      "max_cost": 150.0,
+      "currency": "USD",
+      "unit": "session",
+      "notes": "Removal of plaque, calculus, and external surface stains with polishing."
+    },
+    {
+      "code": "orthodontic_consult",
+      "service": "Orthodontic Evaluation & Consultation",
+      "category": "alignment",
+      "min_cost": 50.0,
+      "max_cost": 150.0,
+      "currency": "USD",
+      "unit": "consultation",
+      "notes": "Specialist orthodontic assessment for crowding, spacing, or bite alignment."
+    },
+    {
+      "code": "periodontal_exam",
+      "service": "Periodontal Health Evaluation",
+      "category": "gum_appearance",
+      "min_cost": 65.0,
+      "max_cost": 140.0,
+      "currency": "USD",
+      "unit": "visit",
+      "notes": "Detailed gingival pocket depth measurement and tissue inflammation review."
+    },
+    {
+      "code": "periodontal_scaling",
+      "service": "Periodontal Scaling & Root Planing",
+      "category": "gum_appearance",
+      "min_cost": 120.0,
+      "max_cost": 280.0,
+      "currency": "USD",
+      "unit": "quadrant",
+      "notes": "Subgingival plaque and tartar debridement for localized gum inflammation."
+    },
+    {
+      "code": "occlusal_guard",
+      "service": "Custom Night Guard / Splint Evaluation",
+      "category": "tooth_wear",
+      "min_cost": 250.0,
+      "max_cost": 550.0,
+      "currency": "USD",
+      "unit": "appliance",
+      "notes": "Lab-fabricated protective dental appliance for excessive tooth wear or clenching."
+    },
+    {
+      "code": "dental_xrays",
+      "service": "Diagnostic Bitewing / Periapical Radiographs",
+      "category": "diagnostic",
+      "min_cost": 40.0,
+      "max_cost": 110.0,
+      "currency": "USD",
+      "unit": "series",
+      "notes": "Digital X-ray imaging recommended during initial clinical evaluation."
+    }
+  ],
+  "regional_multipliers": {
+    "IN": {
+      "currency": "INR",
+      "multiplier": 25.0,
+      "notes": "Indicative private dental clinic fee ranges in metropolitan India."
+    },
+    "US": {
+      "currency": "USD",
+      "multiplier": 1.0,
+      "notes": "Indicative dental fee surveys across US metropolitan centers."
+    },
+    "UK": {
+      "currency": "GBP",
+      "multiplier": 0.8,
+      "notes": "Indicative private dental fee ranges in the United Kingdom."
+    }
+  }
+}

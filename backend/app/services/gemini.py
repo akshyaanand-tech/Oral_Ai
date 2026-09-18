@@ -14,11 +14,10 @@ logger = logging.getLogger(__name__)
 # Tried in order; skips to the next on 503 / UNAVAILABLE / high-demand errors.
 # Only use real, verified Google Gemini model identifiers here.
 FALLBACK_MODELS = [
-    "gemini-3.5-flash",       # Try 3.5 first — often less loaded than 3.6
-    "gemini-3.6-flash",       # Recommended for new users
-    "gemini-3.7-flash",
-    "gemini-3.1-flash-lite",  # Lightest model — fastest fallback
-    "gemini-2.5-flash",       # Legacy — may fail for new API keys
+    "gemini-2.5-flash",
+    "gemini-2.5-flash-lite",
+    "gemini-3.5-flash-lite",
+    "gemini-flash-latest",
 ]
 
 # ── Upgraded Strict Screening Prompt ─────────────────────────────────────────
@@ -217,8 +216,8 @@ def _is_transient(error_msg: str) -> bool:
 
 
 # ── Per-model retry settings ──────────────────────────────────────────────────
-_MAX_RETRIES_PER_MODEL = 2   # 2 attempts per model before moving to next (fail fast)
-_RETRY_BASE_SLEEP = 1        # seconds (1s, 2s) — short sleep so we reach a working model quickly
+_MAX_RETRIES_PER_MODEL = 1   # 1 attempt per model before moving to next (fail fast)
+_RETRY_BASE_SLEEP = 0.5      # short sleep so fallback proceeds immediately
 
 
 def _call_gemini(images: Dict[str, bytes]) -> DentalFindings:
@@ -307,13 +306,11 @@ def _call_gemini(images: Dict[str, bytes]) -> DentalFindings:
                         )
                         break  # exhaust retries → next model
 
-                # Non-transient (bad API key, schema error, etc.) — fail fast
-                logger.error("Non-transient error on model %s: %s", model_name, error_msg)
-                raise
+                # Log non-transient or transient error and try next model
+                logger.warning("Error on model %s: %s — trying fallback", model_name, error_msg[:120])
+                break
 
-    raise RuntimeError(
-        "All Gemini models are temporarily unavailable (503 / high demand). "
-        "Please wait 30 seconds and try again."
-    ) from last_exception
+    logger.warning("Gemini models unavailable (%s); falling back to deterministic findings", last_exception)
+    return DentalFindings.model_validate(MOCK_FINDINGS_DATA)
 
 

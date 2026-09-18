@@ -143,6 +143,79 @@ export async function analyzeDentalImages(images, questionnaire = null) {
 }
 
 /**
+ * Submit five oral images + City/PIN code to the new layered screening endpoint:
+ * POST /api/screen
+ * Returns structured findings, care pathway, costs, providers, score, and explanation.
+ * @param {Object} images - { front: Blob, left: Blob, right: Blob, upper: Blob, lower: Blob }
+ * @param {string} [location] - City or Postal/PIN code (e.g. 'Boston', '560001')
+ * @param {Object} [questionnaire] - Optional patient questionnaire responses
+ * @param {boolean} [enableGemini] - Whether to include educational Gemini explanation
+ * @returns {Promise<Object>} Complete ScreeningResponse
+ */
+export async function screenOralHealth(images, location = '', questionnaire = null, enableGemini = true) {
+  const formData = new FormData();
+  const views = ['front', 'left', 'right', 'upper', 'lower'];
+
+  for (const view of views) {
+    const blob = images[view];
+    if (!blob) {
+      throw new Error(`Missing image for view: ${view}`);
+    }
+    const file = blob instanceof File
+      ? blob
+      : new File([blob], `${view}.jpg`, { type: 'image/jpeg' });
+    formData.append(view, file);
+  }
+
+  if (location) {
+    formData.append('location', location);
+  }
+
+  if (questionnaire) {
+    formData.append('questionnaire', JSON.stringify(questionnaire));
+  }
+
+  formData.append('enable_gemini', enableGemini ? 'true' : 'false');
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 180000);
+
+  let response;
+  try {
+    response = await fetch(`${API_BASE}/api/screen`, {
+      method: 'POST',
+      body: formData,
+      signal: controller.signal,
+    });
+  } catch (err) {
+    clearTimeout(timeoutId);
+    if (err.name === 'AbortError') {
+      throw new Error('Screening timed out. Please check your network and try again.');
+    }
+    throw err;
+  }
+  clearTimeout(timeoutId);
+
+  if (!response.ok) {
+    let errorDetail = 'Could not process oral screening. Please try again.';
+    try {
+      const errJson = await response.json();
+      if (typeof errJson.detail === 'string') {
+        errorDetail = errJson.detail;
+      } else if (errJson.detail && errJson.detail.error) {
+        errorDetail = `${errJson.detail.error} ${errJson.detail.issues?.join(', ') || ''}`;
+      }
+    } catch {
+      errorDetail = `Server error (${response.status}).`;
+    }
+    throw new Error(errorDetail);
+  }
+
+  return await response.json();
+}
+
+
+/**
  * Enhance an oral photograph using the AI enhancement endpoint.
  * @param {Blob|File} imageBlob
  * @param {string} view

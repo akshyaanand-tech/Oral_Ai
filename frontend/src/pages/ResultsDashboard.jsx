@@ -22,6 +22,9 @@ import {
   Clock,
   ArrowRight,
   UserCheck,
+  DollarSign,
+  Stethoscope,
+  ListChecks,
 } from 'lucide-react';
 import MedicalDisclaimer from '../components/MedicalDisclaimer';
 import {
@@ -54,15 +57,27 @@ export default function ResultsDashboard({ report, images, questionnaire, onRest
   const [isSubmittingReferral, setIsSubmittingReferral] = useState(false);
 
   const {
-    score = 82,
+    screening_score,
+    score: rawScore = 82,
     score_label = 'Preliminary Visual Screening Score',
-    findings = {},
+    findings: rawFindings = {},
     score_breakdown = {},
+    score_details = {},
     recommendation = '',
+    care_pathway = [],
+    estimated_costs = [],
+    explanation = '',
+    providers: reportProviders = [],
     guidance = {},
     screening_id = 'scr_demo',
     created_at = new Date().toISOString(),
   } = report || {};
+
+  const score = screening_score ?? rawScore;
+  const findings = Array.isArray(rawFindings)
+    ? rawFindings.reduce((acc, f) => ({ ...acc, [f.category]: f }), {})
+    : rawFindings || {};
+  const deductions = score_details?.category_deductions || score_breakdown || {};
 
   // Fetch past screenings on mount for longitudinal tracking
   useEffect(() => {
@@ -75,11 +90,16 @@ export default function ResultsDashboard({ report, images, questionnaire, onRest
       }
     });
 
-    fetchProviders().then((res) => {
-      setProviders(res || []);
-      if (res && res.length > 0) setSelectedProvider(res[0]);
-    });
-  }, [screening_id]);
+    if (reportProviders && reportProviders.length > 0) {
+      setProviders(reportProviders);
+      setSelectedProvider(reportProviders[0]);
+    } else {
+      fetchProviders().then((res) => {
+        setProviders(res || []);
+        if (res && res.length > 0) setSelectedProvider(res[0]);
+      });
+    }
+  }, [screening_id, reportProviders]);
 
   const getScoreTheme = (val) => {
     if (val >= 80)
@@ -349,28 +369,28 @@ export default function ResultsDashboard({ report, images, questionnaire, onRest
                 <td>Alignment & Spacing</td>
                 <td>{findings.alignment?.severity || 'none'}</td>
                 <td className="text-right text-amber-400">
-                  {score_breakdown.alignment > 0 ? `-${score_breakdown.alignment}` : '0'}
+                  {deductions.alignment > 0 ? `-${deductions.alignment}` : '0'}
                 </td>
               </tr>
               <tr>
                 <td>Surface Discoloration</td>
                 <td>{findings.discoloration?.severity || 'none'}</td>
                 <td className="text-right text-amber-400">
-                  {score_breakdown.discoloration > 0 ? `-${score_breakdown.discoloration}` : '0'}
+                  {deductions.discoloration > 0 ? `-${deductions.discoloration}` : '0'}
                 </td>
               </tr>
               <tr>
                 <td>Tooth Surface Wear</td>
                 <td>{findings.tooth_wear?.severity || 'none'}</td>
                 <td className="text-right text-amber-400">
-                  {score_breakdown.tooth_wear > 0 ? `-${score_breakdown.tooth_wear}` : '0'}
+                  {deductions.tooth_wear > 0 ? `-${deductions.tooth_wear}` : '0'}
                 </td>
               </tr>
               <tr>
                 <td>Gum Appearance</td>
                 <td>{findings.gum_appearance?.severity || 'none'}</td>
                 <td className="text-right text-amber-400">
-                  {score_breakdown.gum_appearance > 0 ? `-${score_breakdown.gum_appearance}` : '0'}
+                  {deductions.gum_appearance > 0 ? `-${deductions.gum_appearance}` : '0'}
                 </td>
               </tr>
               <tr className="total-row">
@@ -439,6 +459,120 @@ export default function ResultsDashboard({ report, images, questionnaire, onRest
           )}
         </div>
       </div>
+
+      {/* Educational Explanation Layer */}
+      {explanation && (
+        <div className="score-breakdown-card border border-cyan-500/30 bg-gradient-to-br from-slate-900 via-slate-800 to-cyan-950/20">
+          <div className="flex items-center gap-2 mb-3">
+            <Sparkles className="w-5 h-5 text-cyan-400" />
+            <h3 className="breakdown-title text-cyan-300">Educational Screening Explanation</h3>
+          </div>
+          <div className="text-sm text-slate-200 leading-relaxed whitespace-pre-line space-y-3">
+            {explanation}
+          </div>
+          <div className="mt-4 pt-3 border-t border-slate-700/50 flex items-center justify-between text-xs text-slate-400">
+            <span>Non-diagnostic educational guidance generated to clarify visual indicators.</span>
+            <span className="text-cyan-400 font-medium">Screening Score: {score}/100</span>
+          </div>
+        </div>
+      )}
+
+      {/* Suggested Care Pathway Section */}
+      {care_pathway && care_pathway.length > 0 && (
+        <div className="score-breakdown-card">
+          <div className="flex items-center gap-2 mb-2">
+            <ListChecks className="w-5 h-5 text-emerald-400" />
+            <h3 className="breakdown-title">Suggested Care Pathway</h3>
+          </div>
+          <p className="breakdown-sub mb-4">
+            Rule-based professional care steps derived from your visual indicators. Connects visible observations with appropriate dental specialties.
+          </p>
+
+          <div className="space-y-4">
+            {care_pathway.map((step, idx) => (
+              <div key={step.step_id || idx} className="p-4 rounded-lg bg-slate-800/80 border border-slate-700/70 hover:border-slate-600 transition-colors">
+                <div className="flex items-start justify-between flex-wrap gap-2 mb-2">
+                  <div className="flex items-center gap-2">
+                    <span className="w-6 h-6 rounded-full bg-cyan-500/20 text-cyan-300 flex items-center justify-center text-xs font-bold">
+                      {idx + 1}
+                    </span>
+                    <h4 className="font-semibold text-white text-base">{step.title}</h4>
+                  </div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-300 border border-emerald-500/30 flex items-center gap-1">
+                      <Stethoscope className="w-3 h-3" />
+                      {step.recommended_specialist}
+                    </span>
+                    <span className="px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-500/10 text-amber-300 border border-amber-500/30">
+                      {step.urgency}
+                    </span>
+                  </div>
+                </div>
+
+                <p className="text-sm text-slate-300 mb-3 ml-8">
+                  {step.action}
+                </p>
+
+                {step.home_care && step.home_care.length > 0 && (
+                  <div className="ml-8 pt-2 border-t border-slate-700/50">
+                    <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Suggested Home Care Focus:</span>
+                    <ul className="mt-1 text-xs text-slate-300 space-y-1 list-disc pl-4">
+                      {step.home_care.map((tip, tIdx) => (
+                        <li key={tIdx}>{tip}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Indicative Dental Cost Estimations */}
+      {estimated_costs && estimated_costs.length > 0 && (
+        <div className="score-breakdown-card">
+          <div className="flex items-center gap-2 mb-2">
+            <DollarSign className="w-5 h-5 text-amber-400" />
+            <h3 className="breakdown-title">Indicative Regional Dental Cost Estimates</h3>
+          </div>
+          <p className="breakdown-sub mb-4">
+            Estimated fee ranges for care pathway procedures based on standard dental fee surveys. Displayed as indicative ranges, not guaranteed prices.
+          </p>
+
+          <div className="breakdown-table-wrap">
+            <table className="breakdown-table">
+              <thead>
+                <tr>
+                  <th>Procedure / Service</th>
+                  <th>Clinical Category</th>
+                  <th className="text-right">Indicative Range</th>
+                </tr>
+              </thead>
+              <tbody>
+                {estimated_costs.map((c, idx) => (
+                  <tr key={idx}>
+                    <td>
+                      <div className="font-medium text-white">{c.service}</div>
+                      <div className="text-xs text-slate-400 mt-0.5">{c.notes}</div>
+                    </td>
+                    <td className="capitalize text-slate-300 text-xs">
+                      {c.category ? c.category.replace('_', ' ') : 'General'}
+                    </td>
+                    <td className="text-right font-semibold text-emerald-400 whitespace-nowrap">
+                      {c.cost_range}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="mt-3 p-2.5 rounded bg-slate-800/60 border border-slate-700/50 text-xs text-slate-400">
+            <strong>Note:</strong> Cost estimates are purely indicative ranges. Actual costs depend on the specific dental clinic, clinical diagnostic findings, and individual patient coverage.
+          </div>
+        </div>
+      )}
 
       {/* Longitudinal Tracking & Comparison Section */}
       <div className="tracking-section-card no-print">

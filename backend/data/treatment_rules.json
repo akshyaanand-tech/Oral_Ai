@@ -1,0 +1,222 @@
+{
+  "version": "1.0",
+  "disclaimer": "Treatment rules provide preliminary visual screening suggestions only and are not medical diagnoses.",
+  "rules": {
+    "alignment": {
+      "none": {
+        "title": "Alignment Within Typical Limits",
+        "action": "Routine monitoring during regular dental visits",
+        "urgency": "Routine",
+        "specialty": "General Dentist",
+        "home_care": [
+          "Continue regular daily brushing and flossing",
+          "Monitor for any shifting or spacing changes over time"
+        ]
+      },
+      "mild": {
+        "title": "Minor Alignment Variation",
+        "action": "Consider elective orthodontic consultation if alignment improvement is desired",
+        "urgency": "Elective / Non-urgent",
+        "specialty": "Orthodontist",
+        "home_care": [
+          "Use interdental brushes or floss threaders around crowded areas",
+          "Ensure extra attention when brushing tight contact points"
+        ]
+      },
+      "moderate": {
+        "title": "Orthodontic Evaluation for Crowding / Spacing",
+        "action": "Orthodontic evaluation to assess bite alignment, crowding, or spacing",
+        "urgency": "Recommended within 1-3 months",
+        "specialty": "Orthodontist",
+        "home_care": [
+          "Clean thoroughly along crowded surfaces where plaque tends to accumulate",
+          "Use waxed dental floss or water flosser for tight contact areas"
+        ]
+      },
+      "marked": {
+        "title": "Noticeable Alignment Irregularity",
+        "action": "Comprehensive orthodontic evaluation for functional bite and arch alignment",
+        "urgency": "Recommended consultation",
+        "specialty": "Orthodontist",
+        "home_care": [
+          "Maintain diligent hygiene around rotated or crowded teeth",
+          "Avoid biting hard non-food objects that can stress misaligned teeth"
+        ]
+      },
+      "uncertain": {
+        "title": "Alignment Observation Inconclusive",
+        "action": "In-person dental examination for direct clinical visual check",
+        "urgency": "Routine",
+        "specialty": "General Dentist",
+        "home_care": [
+          "Standard daily oral hygiene routine"
+        ]
+      }
+    },
+    "discoloration": {
+      "none": {
+        "title": "Surface Coloration Within Typical Range",
+        "action": "Maintain daily oral hygiene and biannual preventive cleanings",
+        "urgency": "Routine",
+        "specialty": "General Dentist",
+        "home_care": [
+          "Brush twice daily with fluoride toothpaste for two minutes",
+          "Limit consumption of staining foods and beverages"
+        ]
+      },
+      "mild": {
+        "title": "Possible Surface Staining",
+        "action": "Professional dental examination and prophylaxis cleaning assessment",
+        "urgency": "Routine (next regular visit)",
+        "specialty": "General Dentist",
+        "home_care": [
+          "Rinse mouth with water after coffee, tea, or dark sauces",
+          "Use a soft-bristled toothbrush with gentle circular motions"
+        ]
+      },
+      "moderate": {
+        "title": "Visible Extrinsic Staining or Uneven Coloration",
+        "action": "Professional hygiene cleaning and enamel surface assessment",
+        "urgency": "Recommended within 1 month",
+        "specialty": "General Dentist",
+        "home_care": [
+          "Avoid highly abrasive charcoal or baking soda pastes that can erode enamel",
+          "Maintain twice-daily brushing with enamel-safe fluoride toothpaste"
+        ]
+      },
+      "marked": {
+        "title": "Prominent Discoloration / Staining",
+        "action": "Comprehensive clinical evaluation to differentiate extrinsic stain from subsurface changes",
+        "urgency": "Recommended within 2-4 weeks",
+        "specialty": "General Dentist",
+        "home_care": [
+          "Brush gently with fluoride toothpaste",
+          "Schedule a professional cleaning to safely remove accumulated deposits"
+        ]
+      },
+      "uncertain": {
+        "title": "Discoloration Observation Inconclusive",
+        "action": "In-person visual check under standard operatory lighting",
+        "urgency": "Routine",
+        "specialty": "General Dentist",
+        "home_care": [
+          "Standard daily oral hygiene routine"
+        ]
+      }
+    },
+    "tooth_wear": {
+      "none": {
+        "title": "Tooth Surfaces Show No Notable Flattening",
+        "action": "Continue regular preventive recall appointments",
+        "urgency": "Routine",
+        "specialty": "General Dentist",
+        "home_care": [
+          "Use a soft-bristle toothbrush to protect natural enamel",
+          "Maintain balanced diet and stay hydrated"
+        ]
+      },
+      "mild": {
+        "title": "Possible Minor Incisal / Occlusal Wear",
+        "action": "Dental evaluation to monitor edge wear and discuss nocturnal clenching or dietary acids",
+        "urgency": "Routine",
+        "specialty": "General Dentist",
+        "home_care": [
+          "Avoid chewing hard ice, pens, or fingernails",
+          "Wait 30 minutes before brushing after consuming acidic foods or citrus"
+        ]
+      },
+      "moderate": {
+        "title": "Visible Tooth Flattening or Edge Chipping",
+        "action": "Occlusal wear assessment; discuss night guard / bite splint evaluation",
+        "urgency": "Recommended within 1 month",
+        "specialty": "General Dentist",
+        "home_care": [
+          "Practice daytime jaw relaxation (lips together, teeth apart)",
+          "Use desensitizing fluoride toothpaste if temperature sensitivity occurs"
+        ]
+      },
+      "marked": {
+        "title": "Marked Tooth Wear or Noticeable Chipping",
+        "action": "Comprehensive occlusal evaluation with general dentist or prosthodontist",
+        "urgency": "Recommended within 2-3 weeks",
+        "specialty": "General Dentist",
+        "home_care": [
+          "Protect compromised tooth edges by avoiding crunchy or hard items",
+          "Consult dentist promptly for protective occlusal appliance evaluation"
+        ]
+      },
+      "uncertain": {
+        "title": "Tooth Wear Observation Inconclusive",
+        "action": "Clinical examination under dental loupes",
+        "urgency": "Routine",
+        "specialty": "General Dentist",
+        "home_care": [
+          "Standard gentle brushing with soft bristles"
+        ]
+      }
+    },
+    "gum_appearance": {
+      "none": {
+        "title": "Gum Margin Appears Healthy & Pink",
+        "action": "Continue regular maintenance and biannual preventive cleanings",
+        "urgency": "Routine",
+        "specialty": "General Dentist",
+        "home_care": [
+          "Floss gently once daily along the gum line",
+          "Brush with gentle 45-degree angle towards the gingival margin"
+        ]
+      },
+      "mild": {
+        "title": "Possible Mild Gingival Redness Along Margin",
+        "action": "Dental hygiene evaluation and plaque-control coaching",
+        "urgency": "Routine",
+        "specialty": "General Dentist",
+        "home_care": [
+          "Floss daily to remove interdental plaque",
+          "Use an alcohol-free antiseptic or saltwater mouth rinse for 7 days"
+        ]
+      },
+      "moderate": {
+        "title": "Visible Redness or Marginal Swelling",
+        "action": "Gingival health examination and professional periodontal assessment",
+        "urgency": "Recommended within 2-4 weeks",
+        "specialty": "Periodontist",
+        "home_care": [
+          "Brush gently with an ultra-soft toothbrush along the gumline",
+          "Do not stop brushing or flossing if gums bleed; gentle cleaning is essential"
+        ]
+      },
+      "marked": {
+        "title": "Marked Gingival Redness or Evident Tissue Inflammation",
+        "action": "Specialist periodontal consultation and thorough periodontal pocket charting",
+        "urgency": "Recommended within 1-2 weeks",
+        "specialty": "Periodontist",
+        "home_care": [
+          "Use gentle chlorhexidine or antimicrobial mouth rinse as advised by clinician",
+          "Avoid smoking or tobacco products which aggravate periodontal tissues",
+          "Seek professional periodontal care promptly"
+        ]
+      },
+      "uncertain": {
+        "title": "Gum Appearance Observation Inconclusive",
+        "action": "In-person gingival examination with periodontal probing",
+        "urgency": "Routine",
+        "specialty": "General Dentist",
+        "home_care": [
+          "Gentle daily flossing and soft brushing"
+        ]
+      }
+    }
+  },
+  "general_preventive": {
+    "title": "Comprehensive Preventive Oral Examination",
+    "action": "Biannual dental examination, professional cleaning, and diagnostic check",
+    "urgency": "Routine (within 6 months)",
+    "specialty": "General Dentist",
+    "home_care": [
+      "Brush twice daily for two minutes with fluoride toothpaste",
+      "Floss once daily between all teeth",
+      "Limit sugary and acidic snacks between meals"
+    ]
+  }
+}

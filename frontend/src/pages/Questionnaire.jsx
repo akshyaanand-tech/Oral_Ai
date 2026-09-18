@@ -70,6 +70,13 @@ const QUESTIONS = [
     type: 'text',
     placeholder: 'e.g., Lower front teeth crowding, stain on upper right incisor, night grinding wear...',
   },
+  {
+    id: 'location',
+    question: '7. What is your City or Postal/PIN Code?',
+    desc: 'Used to locate verified dental practices and regional cost ranges (no GPS required).',
+    type: 'text',
+    placeholder: 'e.g., Boston, New York, San Francisco, 560001, 10001...',
+  },
 ];
 
 export default function Questionnaire({ initialAnswers, onComplete, onBack }) {
@@ -81,6 +88,7 @@ export default function Questionnaire({ initialAnswers, onComplete, onBack }) {
       teeth_or_gum_changes: 'none',
       last_dental_visit: '6_to_12_months',
       specific_concern: '',
+      location: '',
     }
   );
 
